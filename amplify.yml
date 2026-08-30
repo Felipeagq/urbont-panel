@@ -1,0 +1,20 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        # `npm ci` exige package-lock.json commiteado — garantiza builds reproducibles.
+        - npm ci
+    build:
+      commands:
+        - npm run build
+  artifacts:
+    # Next.js SSR en Amplify (plataforma WEB_COMPUTE) publica el directorio .next.
+    # Si algún día se migra a export estático, cambiar esto por `out`.
+    baseDirectory: .next
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - node_modules/**/*
+      - .next/cache/**/*
