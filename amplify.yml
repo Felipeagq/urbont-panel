@@ -7,11 +7,13 @@ frontend:
         - npm ci
     build:
       commands:
-        # Las variables de Amplify existen en el build, pero no siempre llegan al
-        # runtime SSR (WEB_COMPUTE). Volcarlas a .env.production garantiza que
+        # Las variables de Amplify existen en el build, pero no llegan al runtime
+        # SSR (WEB_COMPUTE). Volcarlas a .env.production garantiza que
         # BACKEND_API_URL esté disponible para src/app/api/[...path]/route.ts;
-        # sin esto el proxy cae al fallback http://localhost:5001.
-        - env | grep -e '^BACKEND_API_URL=' >> .env.production || echo "AVISO: BACKEND_API_URL no definida en Amplify"
+        # sin esto el proxy cae al fallback de localhost.
+        # El comando va entre comillas simples porque Amplify parsea este fichero
+        # como YAML y un `: ` suelto rompería el buildspec.
+        - 'env | grep -e "^BACKEND_API_URL=" >> .env.production || echo "AVISO - BACKEND_API_URL no definida en Amplify"'
         - npm run build
   artifacts:
     # Next.js SSR en Amplify (plataforma WEB_COMPUTE) publica el directorio .next.
