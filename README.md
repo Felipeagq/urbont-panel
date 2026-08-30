@@ -3,9 +3,8 @@
 Réplica del panel de administración de Urbont, reconstruida sobre **Next.js 15 (App Router)**
 y preparada para desplegarse en **AWS Amplify Hosting** con SSR.
 
-Mantiene el 100 % de las funcionalidades del panel original (`/panel`, Vite + wouter):
-mismas 14 pantallas, mismo diseño, mismos endpoints y las mismas correcciones de
-mapeo de respuestas del backend.
+Sustituye al panel anterior (Vite + wouter), ya retirado: mismas 14 pantallas,
+mismo diseño y los mismos endpoints.
 
 ---
 
@@ -16,8 +15,9 @@ npm install
 npm run dev          # http://localhost:3000
 ```
 
-El backend de Urbont debe estar escuchando en `http://localhost:5001`
-(configurable con `BACKEND_API_URL` en `.env.local`).
+El backend al que se hace proxy se configura con `BACKEND_API_URL` en
+`.env.local`: `https://app.urbont.com` para usar el de producción, o
+`http://localhost:5001` si corres el backend en local.
 
 | Script             | Qué hace                                  |
 | ------------------ | ----------------------------------------- |
@@ -32,7 +32,7 @@ El backend de Urbont debe estar escuchando en `http://localhost:5001`
 
 | Variable          | Ámbito   | Descripción                                                |
 | ----------------- | -------- | ---------------------------------------------------------- |
-| `BACKEND_API_URL` | Servidor | URL del backend al que se hace proxy. Por defecto `http://localhost:5001`. |
+| `BACKEND_API_URL` | Servidor | URL del backend al que se hace proxy. Si no se define, `http://localhost:5001`. |
 
 `BACKEND_API_URL` **no** lleva el prefijo `NEXT_PUBLIC_` a propósito: sólo la lee el
 route handler en el servidor, así que la dirección del backend nunca llega al
@@ -98,7 +98,7 @@ Ventajas:
 4. **Variables de entorno** — *App settings → Environment variables*:
 
    ```
-   BACKEND_API_URL = https://api.urbont.com
+   BACKEND_API_URL = https://app.urbont.com
    ```
 
    > Debe ser accesible públicamente desde el compute de Amplify.
@@ -116,7 +116,7 @@ No es lo recomendado aquí (se pierde el proxy servidor), pero sería:
 1. Añadir `output: 'export'` en `next.config.ts`.
 2. Cambiar `baseDirectory` a `out` en `amplify.yml`.
 3. Sustituir el route handler por una regla en *Rewrites and redirects*:
-   `/api/<*>` → `https://api.urbont.com/api/<*>` con tipo **200 (Rewrite)**.
+   `/api/<*>` → `https://app.urbont.com/api/<*>` con tipo **200 (Rewrite)**.
 
 ---
 
