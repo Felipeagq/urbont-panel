@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { adminFetch } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
 import {
   Shield, RefreshCw, Search, UserPlus, X, Loader2,
-  AlertTriangle, Lock, Unlock, Mail, Clock, ChevronDown
+  AlertTriangle, Lock, Unlock, Mail, Clock, ChevronDown,
+  KeyRound, Eye, EyeOff
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -48,7 +50,16 @@ interface InviteForm {
   password: string;
 }
 
+// Mismo mínimo que exige el formulario de invitación, para no aceptar aquí
+// contraseñas que el backend rechazaría al crear el usuario.
+const MIN_PASSWORD_LENGTH = 8;
+
 export default function AdminUsers() {
+  const { user: currentUser } = useAuth();
+  // El backend sólo permite a un owner cambiar la contraseña de otros admins;
+  // ocultamos la acción al resto para no ofrecer un botón que dará 403.
+  const isOwner = currentUser?.role === 'owner';
+
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +70,11 @@ export default function AdminUsers() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<string | null>(null);
   const [editRole, setEditRole] = useState('');
+  const [pwdTarget, setPwdTarget] = useState<AdminUser | null>(null);
+  const [pwdValue, setPwdValue] = useState('');
+  const [pwdConfirm, setPwdConfirm] = useState('');
+  const [pwdVisible, setPwdVisible] = useState(false);
+  const [pwdLoading, setPwdLoading] = useState(false);
 
   const loadData = useCallback(() => {
     setLoading(true);
@@ -121,6 +137,44 @@ export default function AdminUsers() {
       toast.error(err.message || 'Error al cambiar el rol');
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  const closePasswordModal = useCallback(() => {
+    setPwdTarget(null);
+    setPwdValue('');
+    setPwdConfirm('');
+    setPwdVisible(false);
+  }, []);
+
+  // Cerrar con Escape, como cualquier diálogo modal.
+  useEffect(() => {
+    if (!pwdTarget) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !pwdLoading) closePasswordModal();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pwdTarget, pwdLoading, closePasswordModal]);
+
+  const pwdTooShort = pwdValue.length > 0 && pwdValue.length < MIN_PASSWORD_LENGTH;
+  const pwdMismatch = pwdConfirm.length > 0 && pwdValue !== pwdConfirm;
+  const pwdValid = pwdValue.length >= MIN_PASSWORD_LENGTH && pwdValue === pwdConfirm;
+
+  const handlePasswordChange = async () => {
+    if (!pwdTarget || !pwdValid) return;
+    setPwdLoading(true);
+    try {
+      await adminFetch(`/auth/users/${pwdTarget.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ password: pwdValue }),
+      });
+      toast.success(`Contraseña actualizada para ${pwdTarget.name}`);
+      closePasswordModal();
+    } catch (err: any) {
+      toast.error(err.message || 'Error al cambiar la contraseña');
+    } finally {
+      setPwdLoading(false);
     }
   };
 
@@ -272,7 +326,7 @@ export default function AdminUsers() {
       ) : (
         <div className="bg-white rounded-xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden">
           {/* Table head */}
-          <div className="grid grid-cols-[2fr_2fr_1.5fr_1fr_1fr] gap-4 px-5 py-3 bg-gray-50 border-b border-gray-100 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+          <div className="grid grid-cols-[2fr_2fr_1.5fr_1fr_1.4fr] gap-4 px-5 py-3 bg-gray-50 border-b border-gray-100 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
             <span>Usuario</span>
             <span>Email</span>
             <span>Rol</span>
@@ -293,7 +347,7 @@ export default function AdminUsers() {
                 const isEditingRole = editTarget === user.id;
 
                 return (
-                  <div key={user.id} className="grid grid-cols-[2fr_2fr_1.5fr_1fr_1fr] gap-4 px-5 py-3.5 items-center hover:bg-gray-50/50 transition-colors">
+                  <div key={user.id} className="grid grid-cols-[2fr_2fr_1.5fr_1fr_1.4fr] gap-4 px-5 py-3.5 items-center hover:bg-gray-50/50 transition-colors">
                     {/* User */}
                     <div className="flex items-center gap-3 min-w-0">
                       <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0 ${av} ${!user.active ? 'opacity-40' : ''}`}>
@@ -349,7 +403,18 @@ export default function AdminUsers() {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex justify-end">
+                    <div className="flex justify-end items-center gap-1.5">
+                      {isOwner && (
+                        <button
+                          onClick={() => { closePasswordModal(); setPwdTarget(user); }}
+                          disabled={!!actionLoading}
+                          title={`Cambiar contraseña de ${user.name}`}
+                          aria-label={`Cambiar contraseña de ${user.name}`}
+                          className="flex items-center justify-center p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-[--brand]/5 hover:text-[--brand] hover:border-[--brand]/30 transition-colors disabled:opacity-50"
+                        >
+                          <KeyRound className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       <button
                         onClick={() => handleToggleActive(user)}
                         disabled={!!actionLoading}
@@ -374,6 +439,104 @@ export default function AdminUsers() {
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Password change modal */}
+      {pwdTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-[2px] p-4"
+          onClick={() => { if (!pwdLoading) closePasswordModal(); }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Cambiar contraseña de ${pwdTarget.name}`}
+            className="bg-white rounded-xl border border-gray-100 shadow-xl w-full max-w-md p-5"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0 ${avatarColor(pwdTarget.name)}`}>
+                  {getInitials(pwdTarget.name)}
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-sm font-semibold text-gray-900 truncate">Cambiar contraseña</h2>
+                  <p className="text-xs text-gray-400 truncate">{pwdTarget.name} · {pwdTarget.email}</p>
+                </div>
+              </div>
+              <button
+                onClick={closePasswordModal}
+                disabled={pwdLoading}
+                className="p-1 rounded text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                aria-label="Cerrar"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Nueva contraseña</label>
+                <div className="relative">
+                  <input
+                    type={pwdVisible ? 'text' : 'password'}
+                    autoFocus
+                    autoComplete="new-password"
+                    className="w-full border border-gray-200 rounded-lg pl-3 pr-9 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[--brand]/30 focus:border-[--brand] bg-white"
+                    placeholder={`Mín. ${MIN_PASSWORD_LENGTH} caracteres`}
+                    value={pwdValue}
+                    onChange={e => setPwdValue(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPwdVisible(v => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+                    aria-label={pwdVisible ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  >
+                    {pwdVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                {pwdTooShort && (
+                  <p className="text-[11px] text-red-600 mt-1">La contraseña debe tener al menos {MIN_PASSWORD_LENGTH} caracteres.</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Confirmar contraseña</label>
+                <input
+                  type={pwdVisible ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[--brand]/30 focus:border-[--brand] bg-white"
+                  placeholder="Repite la contraseña"
+                  value={pwdConfirm}
+                  onChange={e => setPwdConfirm(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && pwdValid && !pwdLoading) handlePasswordChange(); }}
+                />
+                {pwdMismatch && (
+                  <p className="text-[11px] text-red-600 mt-1">Las contraseñas no coinciden.</p>
+                )}
+              </div>
+
+              <p className="text-[11px] text-gray-400 leading-snug">
+                El usuario deberá iniciar sesión con esta contraseña. Comunícasela por un canal seguro.
+              </p>
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={handlePasswordChange}
+                disabled={!pwdValid || pwdLoading}
+                className="btn-primary text-xs flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {pwdLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <KeyRound className="w-3.5 h-3.5" />}
+                Cambiar contraseña
+              </button>
+              <button onClick={closePasswordModal} disabled={pwdLoading} className="btn-outline text-xs disabled:opacity-50">
+                Cancelar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
