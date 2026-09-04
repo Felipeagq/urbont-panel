@@ -151,7 +151,7 @@ export default function Incidents() {
               onClick={() => setStatusFilter(s)}
               className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
                 statusFilter === s
-                  ? 'border-[--brand] text-[--brand] bg-[--brand-pale]'
+                  ? 'border-(--brand) text-(--brand) bg-(--brand-pale)'
                   : 'border-gray-200 text-gray-500 bg-white hover:border-gray-300'
               }`}
             >
@@ -162,7 +162,7 @@ export default function Incidents() {
         <select
           value={severityFilter}
           onChange={e => setSeverityFilter(e.target.value as any)}
-          className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-[--brand]/30"
+          className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-(--brand)/30"
         >
           <option value="all">Toda severidad</option>
           <option value="critical">Crítico</option>
@@ -177,7 +177,7 @@ export default function Incidents() {
             placeholder="Buscar incidente..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-8 pr-4 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[--brand]/30 focus:border-[--brand]"
+            className="w-full pl-8 pr-4 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand)"
           />
         </div>
       </div>
@@ -278,7 +278,7 @@ export default function Incidents() {
                         <div className="space-y-2">
                           <p className="text-xs font-medium text-gray-700">Notas de resolución</p>
                           <textarea
-                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[--brand]/30"
+                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-(--brand)/30"
                             rows={3}
                             placeholder="Describe cómo se resolvió el incidente..."
                             value={resolutionText}

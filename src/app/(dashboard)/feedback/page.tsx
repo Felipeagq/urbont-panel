@@ -154,7 +154,7 @@ export default function FeedbackPage() {
               {ratingFilter && (
                 <button
                   onClick={() => setRatingFilter(null)}
-                  className="mt-2 text-xs text-[--brand] hover:underline"
+                  className="mt-2 text-xs text-(--brand) hover:underline"
                 >
                   Limpiar filtro
                 </button>
@@ -197,7 +197,7 @@ export default function FeedbackPage() {
                 placeholder="Buscar por usuario, conductor, comentario..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[--brand]/30 focus:border-[--brand]"
+                className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand)"
               />
             </div>
             {ratingFilter && (

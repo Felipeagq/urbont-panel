@@ -208,7 +208,7 @@ export default function Fares() {
               onClick={() => setActiveClass(vc)}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-all ${
                 currentClass === vc
-                  ? 'border-[--brand] text-[--brand] bg-[--brand-pale] shadow-sm'
+                  ? 'border-(--brand) text-(--brand) bg-(--brand-pale) shadow-sm'
                   : 'border-gray-200 text-gray-600 bg-white hover:border-gray-300'
               }`}
             >

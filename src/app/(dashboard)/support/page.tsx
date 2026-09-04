@@ -149,19 +149,19 @@ export default function Support() {
               onClick={() => setStatusFilter(s)}
               className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
                 statusFilter === s
-                  ? 'border-[--brand] text-[--brand] bg-[--brand-pale]'
+                  ? 'border-(--brand) text-(--brand) bg-(--brand-pale)'
                   : 'border-gray-200 text-gray-500 bg-white hover:border-gray-300'
               }`}
             >
               {s === 'all' ? 'Todos' : STATUS_CONFIG[s]?.label ?? s}
-              <span className={`ml-1.5 font-bold ${statusFilter === s ? 'text-[--brand]' : 'text-gray-400'}`}>{counts[s]}</span>
+              <span className={`ml-1.5 font-bold ${statusFilter === s ? 'text-(--brand)' : 'text-gray-400'}`}>{counts[s]}</span>
             </button>
           ))}
         </div>
         <select
           value={priorityFilter}
           onChange={e => setPriorityFilter(e.target.value as any)}
-          className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-[--brand]/30"
+          className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-(--brand)/30"
         >
           <option value="all">Toda prioridad</option>
           <option value="critical">Crítico</option>
@@ -176,7 +176,7 @@ export default function Support() {
             placeholder="Buscar ticket..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-8 pr-4 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[--brand]/30"
+            className="w-full pl-8 pr-4 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-(--brand)/30"
           />
         </div>
       </div>
@@ -236,7 +236,7 @@ export default function Support() {
                         {formatRelativeTime(ticket.createdAt)}
                       </span>
                       {ticket.replies.length > 0 && (
-                        <span className="text-[--brand]">{ticket.replies.length} respuestas</span>
+                        <span className="text-(--brand)">{ticket.replies.length} respuestas</span>
                       )}
                     </div>
                   </div>
@@ -262,7 +262,7 @@ export default function Support() {
                             <div key={i} className={`flex ${reply.author === 'Admin' || reply.author === 'Soporte' ? 'justify-end' : 'justify-start'}`}>
                               <div className={`max-w-[80%] rounded-xl px-3.5 py-2.5 text-sm ${
                                 reply.author === 'Admin' || reply.author === 'Soporte'
-                                  ? 'bg-[--brand] text-white'
+                                  ? 'bg-(--brand) text-white'
                                   : 'bg-white border border-gray-100 text-gray-800'
                               }`}>
                                 <p className={`text-[10px] font-medium mb-1 ${reply.author === 'Admin' || reply.author === 'Soporte' ? 'text-white/70' : 'text-gray-500'}`}>
@@ -281,7 +281,7 @@ export default function Support() {
                       <div className="p-4 border-t border-gray-100 space-y-3">
                         <div className="flex gap-2">
                           <textarea
-                            className="flex-1 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[--brand]/30 focus:border-[--brand] min-h-[80px]"
+                            className="flex-1 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand) min-h-[80px]"
                             placeholder="Escribe tu respuesta al usuario..."
                             value={replyText[ticket.id] ?? ''}
                             onChange={e => setReplyText(prev => ({ ...prev, [ticket.id]: e.target.value }))}
@@ -308,7 +308,7 @@ export default function Support() {
                           <button
                             onClick={() => handleReply(ticket.id)}
                             disabled={!replyText[ticket.id]?.trim() || !!actionLoading}
-                            className="flex items-center gap-1.5 px-4 py-2 bg-[--brand] text-white rounded-lg text-xs font-medium hover:bg-[--brand-dark] disabled:opacity-50 transition-colors"
+                            className="flex items-center gap-1.5 px-4 py-2 bg-(--brand) text-white rounded-lg text-xs font-medium hover:bg-(--brand-dark) disabled:opacity-50 transition-colors"
                           >
                             {actionLoading === `reply-${ticket.id}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                             Enviar respuesta

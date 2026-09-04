@@ -134,7 +134,7 @@ export default function LoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={isLoading}
                   data-testid="input-email"
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg bg-white text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[--brand]/30 focus:border-[--brand] transition-all duration-150 disabled:opacity-60"
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg bg-white text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand) transition-all duration-150 disabled:opacity-60"
                 />
               </div>
             </div>
@@ -156,7 +156,7 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={isLoading}
                   data-testid="input-password"
-                  className="w-full pl-10 pr-10 py-2.5 border border-gray-200 rounded-lg bg-white text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[--brand]/30 focus:border-[--brand] transition-all duration-150 disabled:opacity-60"
+                  className="w-full pl-10 pr-10 py-2.5 border border-gray-200 rounded-lg bg-white text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand) transition-all duration-150 disabled:opacity-60"
                 />
                 <button
                   type="button"
@@ -175,7 +175,7 @@ export default function LoginPage() {
                 type="submit"
                 disabled={isLoading || !email || !password}
                 data-testid="button-submit-login"
-                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-semibold text-white transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[--brand]/50 disabled:opacity-55 disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-semibold text-white transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-(--brand)/50 disabled:opacity-55 disabled:cursor-not-allowed"
                 style={{ background: 'var(--brand)' }}
                 onMouseEnter={(e) => { (e.currentTarget.style.background = 'var(--brand-light)') }}
                 onMouseLeave={(e) => { (e.currentTarget.style.background = 'var(--brand)') }}

@@ -127,12 +127,12 @@ export default function Drivers() {
             onClick={() => setStatusFilter(s)}
             className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
               statusFilter === s
-                ? 'border-[--brand] text-[--brand] bg-[--brand-pale]'
+                ? 'border-(--brand) text-(--brand) bg-(--brand-pale)'
                 : 'border-gray-200 text-gray-500 bg-white hover:border-gray-300'
             }`}
           >
             {s === 'all' ? 'Todos' : STATUS_CONFIG[s].label}
-            <span className={`ml-1.5 font-bold ${statusFilter === s ? 'text-[--brand]' : 'text-gray-400'}`}>
+            <span className={`ml-1.5 font-bold ${statusFilter === s ? 'text-(--brand)' : 'text-gray-400'}`}>
               {counts[s]}
             </span>
           </button>
@@ -148,7 +148,7 @@ export default function Drivers() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           data-testid="input-search-drivers"
-          className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[--brand]/30 focus:border-[--brand] transition-all"
+          className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand) transition-all"
         />
       </div>
 
@@ -297,7 +297,7 @@ export default function Drivers() {
                         <div className="flex gap-2 flex-wrap">
                           <button
                             onClick={() => setSelectedDriver(driver)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 border border-[--brand] text-[--brand] bg-[--brand-pale] hover:bg-[--brand]/10 rounded-lg text-xs font-medium transition-colors"
+                            className="flex items-center gap-1.5 px-3 py-1.5 border border-(--brand) text-(--brand) bg-(--brand-pale) hover:bg-(--brand)/10 rounded-lg text-xs font-medium transition-colors"
                           >
                             <ExternalLink className="w-3.5 h-3.5" /> Perfil completo
                           </button>

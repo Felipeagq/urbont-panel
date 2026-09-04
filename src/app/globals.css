@@ -154,16 +154,16 @@
   }
   .input-base {
     @apply w-full px-3.5 py-2.5 border border-gray-200 rounded-lg bg-white text-sm text-gray-900 placeholder:text-gray-400 
-    focus:outline-none focus:ring-2 focus:ring-[--brand]/30 focus:border-[--brand] transition-all duration-150;
+    focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand) transition-all duration-150;
   }
   .btn-primary {
-    @apply px-4 py-2.5 bg-[--brand] hover:bg-[--brand-light] text-white text-sm font-medium rounded-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-[--brand]/40 focus:ring-offset-1;
+    @apply px-4 py-2.5 bg-(--brand) hover:bg-(--brand-light) text-white text-sm font-medium rounded-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-(--brand)/40 focus:ring-offset-1;
   }
   .btn-outline {
     @apply px-4 py-2 border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg transition-colors duration-150;
   }
   .table-row-hover {
-    @apply hover:bg-[--brand-pale]/50 transition-colors duration-100;
+    @apply hover:bg-(--brand-pale)/50 transition-colors duration-100;
   }
   .hover\:bg-white\/8:hover {
     background-color: rgba(255,255,255,0.08);

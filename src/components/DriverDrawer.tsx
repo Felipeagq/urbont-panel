@@ -191,7 +191,7 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
               key={t}
               onClick={() => setTab(t)}
               className={`flex-1 py-2.5 text-xs font-medium capitalize transition-colors ${
-                tab === t ? 'text-[--brand] border-b-2 border-[--brand]' : 'text-gray-500 hover:text-gray-700'
+                tab === t ? 'text-(--brand) border-b-2 border-(--brand)' : 'text-gray-500 hover:text-gray-700'
               }`}
             >
               {t === 'info' ? 'Información' : t === 'trips' ? 'Viajes' : 'Acciones'}
@@ -332,7 +332,7 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
               <div className="space-y-2">
                 <p className="text-xs font-medium text-gray-700">Añadir nota interna</p>
                 <textarea
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[--brand]/30 focus:border-[--brand]"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand)"
                   rows={3}
                   placeholder="Escribe una nota interna sobre este conductor..."
                   value={noteText}

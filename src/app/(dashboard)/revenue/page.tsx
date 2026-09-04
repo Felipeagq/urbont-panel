@@ -245,7 +245,7 @@ export default function Revenue() {
             {(data.topDrivers || []).slice(0, 8).map((d, idx) => (
               <div key={d.id} className="flex items-center gap-4 px-5 py-3.5">
                 <div className="w-6 text-[11px] font-bold text-gray-400 text-center">{idx + 1}</div>
-                <div className="w-8 h-8 rounded-full bg-[--brand-pale] flex items-center justify-center text-[11px] font-bold text-[--brand] flex-shrink-0">
+                <div className="w-8 h-8 rounded-full bg-(--brand-pale) flex items-center justify-center text-[11px] font-bold text-(--brand) flex-shrink-0">
                   {getInitials(d.name)}
                 </div>
                 <div className="flex-1 min-w-0">

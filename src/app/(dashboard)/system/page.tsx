@@ -340,7 +340,7 @@ export default function System() {
                 placeholder="Buscar..."
                 value={logSearch}
                 onChange={e => setLogSearch(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[--brand]/30"
+                className="w-full pl-8 pr-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-(--brand)/30"
               />
             </div>
           </div>
@@ -396,7 +396,7 @@ export default function System() {
                     <div className="flex gap-1.5">
                       <input
                         type="text"
-                        className={`flex-1 border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[--brand]/30 transition-colors ${
+                        className={`flex-1 border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-(--brand)/30 transition-colors ${
                           isDirty ? 'border-amber-300 bg-amber-50/30' : 'border-gray-200'
                         }`}
                         value={val}
@@ -406,7 +406,7 @@ export default function System() {
                         <button
                           onClick={() => handleConfigSave(key)}
                           disabled={savingConfig === key}
-                          className="flex-shrink-0 px-2 py-1.5 bg-[--brand] text-white rounded-lg text-[10px] font-medium disabled:opacity-50 flex items-center gap-1"
+                          className="flex-shrink-0 px-2 py-1.5 bg-(--brand) text-white rounded-lg text-[10px] font-medium disabled:opacity-50 flex items-center gap-1"
                         >
                           {savingConfig === key ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
                         </button>

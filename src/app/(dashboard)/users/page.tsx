@@ -231,7 +231,7 @@ export default function AdminUsers() {
           placeholder="Buscar por nombre, email, rol..."
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[--brand]/30 focus:border-[--brand]"
+          className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand)"
         />
       </div>
 
@@ -249,7 +249,7 @@ export default function AdminUsers() {
               <label className="block text-xs font-medium text-gray-700 mb-1">Nombre completo</label>
               <input
                 type="text"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[--brand]/30 focus:border-[--brand] bg-white"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand) bg-white"
                 placeholder="Juan Pérez"
                 value={inviteForm.name}
                 onChange={e => setInviteForm(f => ({ ...f, name: e.target.value }))}
@@ -259,7 +259,7 @@ export default function AdminUsers() {
               <label className="block text-xs font-medium text-gray-700 mb-1">Email</label>
               <input
                 type="email"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[--brand]/30 focus:border-[--brand] bg-white"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand) bg-white"
                 placeholder="juan@urbont.com"
                 value={inviteForm.email}
                 onChange={e => setInviteForm(f => ({ ...f, email: e.target.value }))}
@@ -268,7 +268,7 @@ export default function AdminUsers() {
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Rol</label>
               <select
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[--brand]/30 bg-white"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--brand)/30 bg-white"
                 value={inviteForm.role}
                 onChange={e => setInviteForm(f => ({ ...f, role: e.target.value }))}
               >
@@ -283,7 +283,7 @@ export default function AdminUsers() {
               <label className="block text-xs font-medium text-gray-700 mb-1">Contraseña temporal</label>
               <input
                 type="text"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[--brand]/30 focus:border-[--brand] bg-white"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand) bg-white"
                 placeholder="Mín. 8 caracteres"
                 value={inviteForm.password}
                 onChange={e => setInviteForm(f => ({ ...f, password: e.target.value }))}
@@ -369,7 +369,7 @@ export default function AdminUsers() {
                           <select
                             value={editRole}
                             onChange={e => setEditRole(e.target.value)}
-                            className="border border-gray-200 rounded-lg px-2 py-1 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[--brand]/30"
+                            className="border border-gray-200 rounded-lg px-2 py-1 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-(--brand)/30"
                           >
                             {Object.entries(ROLE_CONFIG).map(([r, cfg]) => (
                               <option key={r} value={r}>{cfg.label}</option>
@@ -378,7 +378,7 @@ export default function AdminUsers() {
                           <button
                             onClick={() => handleRoleChange(user.id)}
                             disabled={!!actionLoading}
-                            className="px-2 py-1 bg-[--brand] text-white rounded text-[10px] font-medium disabled:opacity-50"
+                            className="px-2 py-1 bg-(--brand) text-white rounded text-[10px] font-medium disabled:opacity-50"
                           >
                             {actionLoading === `role-${user.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : 'OK'}
                           </button>
@@ -410,7 +410,7 @@ export default function AdminUsers() {
                           disabled={!!actionLoading}
                           title={`Cambiar contraseña de ${user.name}`}
                           aria-label={`Cambiar contraseña de ${user.name}`}
-                          className="flex items-center justify-center p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-[--brand]/5 hover:text-[--brand] hover:border-[--brand]/30 transition-colors disabled:opacity-50"
+                          className="flex items-center justify-center p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-(--brand)/5 hover:text-(--brand) hover:border-(--brand)/30 transition-colors disabled:opacity-50"
                         >
                           <KeyRound className="w-3.5 h-3.5" />
                         </button>
@@ -483,7 +483,7 @@ export default function AdminUsers() {
                     type={pwdVisible ? 'text' : 'password'}
                     autoFocus
                     autoComplete="new-password"
-                    className="w-full border border-gray-200 rounded-lg pl-3 pr-9 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[--brand]/30 focus:border-[--brand] bg-white"
+                    className="w-full border border-gray-200 rounded-lg pl-3 pr-9 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand) bg-white"
                     placeholder={`Mín. ${MIN_PASSWORD_LENGTH} caracteres`}
                     value={pwdValue}
                     onChange={e => setPwdValue(e.target.value)}
@@ -507,7 +507,7 @@ export default function AdminUsers() {
                 <input
                   type={pwdVisible ? 'text' : 'password'}
                   autoComplete="new-password"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[--brand]/30 focus:border-[--brand] bg-white"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand) bg-white"
                   placeholder="Repite la contraseña"
                   value={pwdConfirm}
                   onChange={e => setPwdConfirm(e.target.value)}

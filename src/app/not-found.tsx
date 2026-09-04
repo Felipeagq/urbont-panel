@@ -18,7 +18,7 @@ export default function NotFound() {
 
           <Link
             href="/"
-            className="mt-5 inline-block text-sm font-medium text-[--brand] hover:underline"
+            className="mt-5 inline-block text-sm font-medium text-(--brand) hover:underline"
           >
             ← Volver al panel
           </Link>

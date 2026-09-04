@@ -103,12 +103,12 @@ export default function Passengers() {
               onClick={() => setStatusFilter(s)}
               className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
                 statusFilter === s
-                  ? 'border-[--brand] text-[--brand] bg-[--brand-pale]'
+                  ? 'border-(--brand) text-(--brand) bg-(--brand-pale)'
                   : 'border-gray-200 text-gray-500 bg-white hover:border-gray-300'
               }`}
             >
               {s === 'all' ? 'Todos' : STATUS_CONFIG[s].label}
-              <span className={`ml-1.5 font-bold ${statusFilter === s ? 'text-[--brand]' : 'text-gray-400'}`}>
+              <span className={`ml-1.5 font-bold ${statusFilter === s ? 'text-(--brand)' : 'text-gray-400'}`}>
                 {counts[s]}
               </span>
             </button>
@@ -123,7 +123,7 @@ export default function Passengers() {
             placeholder="Buscar por nombre, email, teléfono..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[--brand]/30 focus:border-[--brand] transition-all"
+            className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand) transition-all"
           />
         </div>
 

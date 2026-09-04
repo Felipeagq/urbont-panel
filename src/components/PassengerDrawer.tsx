@@ -183,7 +183,7 @@ export default function PassengerDrawer({ passenger, onClose, onRefresh }: Passe
               onClick={() => setTab(t)}
               className={`flex-1 py-2.5 text-xs font-medium capitalize transition-colors ${
                 tab === t
-                  ? 'text-[--brand] border-b-2 border-[--brand]'
+                  ? 'text-(--brand) border-b-2 border-(--brand)'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -273,7 +273,7 @@ export default function PassengerDrawer({ passenger, onClose, onRefresh }: Passe
               {showNoteForm ? (
                 <div className="space-y-2">
                   <textarea
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[--brand]/30 focus:border-[--brand]"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand)"
                     rows={3}
                     placeholder="Escribe una nota interna..."
                     value={noteText}
@@ -307,7 +307,7 @@ export default function PassengerDrawer({ passenger, onClose, onRefresh }: Passe
               <p className="text-xs font-medium text-gray-700">Motivo de suspensión</p>
               <input
                 type="text"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[--brand]/30 focus:border-[--brand]"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand)"
                 placeholder="Describe el motivo..."
                 value={suspendReason}
                 onChange={e => setSuspendReason(e.target.value)}

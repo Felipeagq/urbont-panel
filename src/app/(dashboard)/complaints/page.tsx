@@ -119,12 +119,12 @@ export default function Complaints() {
               onClick={() => setStatusFilter(s)}
               className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
                 statusFilter === s
-                  ? 'border-[--brand] text-[--brand] bg-[--brand-pale]'
+                  ? 'border-(--brand) text-(--brand) bg-(--brand-pale)'
                   : 'border-gray-200 text-gray-500 bg-white hover:border-gray-300'
               }`}
             >
               {s === 'all' ? 'Todas' : STATUS_CONFIG[s].label}
-              <span className={`ml-1.5 font-bold ${statusFilter === s ? 'text-[--brand]' : 'text-gray-400'}`}>{counts[s]}</span>
+              <span className={`ml-1.5 font-bold ${statusFilter === s ? 'text-(--brand)' : 'text-gray-400'}`}>{counts[s]}</span>
             </button>
           ))}
         </div>
@@ -135,7 +135,7 @@ export default function Complaints() {
             placeholder="Buscar queja..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-8 pr-4 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[--brand]/30 focus:border-[--brand]"
+            className="w-full pl-8 pr-4 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand)"
           />
         </div>
       </div>
@@ -224,7 +224,7 @@ export default function Complaints() {
                       {resolutionTarget === comp.id && (
                         <div className="space-y-2">
                           <textarea
-                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[--brand]/30"
+                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-(--brand)/30"
                             rows={3}
                             placeholder="Notas de resolución..."
                             value={resolutionText}
