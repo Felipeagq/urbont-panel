@@ -54,6 +54,38 @@ interface InviteForm {
 // contraseñas que el backend rechazaría al crear el usuario.
 const MIN_PASSWORD_LENGTH = 8;
 
+/** Primer valor no vacío entre varias claves candidatas. */
+function pick(raw: Record<string, any>, ...keys: string[]) {
+  for (const key of keys) {
+    const value = raw[key];
+    if (value !== undefined && value !== null && value !== '') return value;
+  }
+  return undefined;
+}
+
+/**
+ * El backend no es consistente en la convención de nombres: /feedback devuelve
+ * `created_at` (ver feedback/page.tsx) mientras que aquí `active` llega en
+ * camelCase. En lugar de asumir una convención, aceptamos ambas para las fechas.
+ *
+ * Si aun así no reconocemos la fecha de creación —que todo usuario tiene— es que
+ * el campo se llama de otra forma, así que lo avisamos con las claves reales para
+ * poder ajustarlo sin tener que inspeccionar el payload a mano.
+ */
+function normalizeUser(raw: any): AdminUser {
+  const createdAt = pick(raw, 'createdAt', 'created_at', 'createdOn', 'created');
+  const lastLogin = pick(raw, 'lastLogin', 'last_login', 'lastLoginAt', 'last_login_at');
+
+  if (process.env.NODE_ENV === 'development' && !createdAt) {
+    console.warn(
+      '[users] No se reconoció la fecha de creación. Claves recibidas:',
+      Object.keys(raw ?? {}),
+    );
+  }
+
+  return { ...raw, createdAt, lastLogin };
+}
+
 export default function AdminUsers() {
   const { user: currentUser } = useAuth();
   // El backend sólo permite a un owner cambiar la contraseña de otros admins;
@@ -79,7 +111,7 @@ export default function AdminUsers() {
   const loadData = useCallback(() => {
     setLoading(true);
     adminFetch('/auth/users')
-      .then((data: any) => data.users ?? [])
+      .then((data: any) => (data.users ?? []).map(normalizeUser))
       .then(setUsers)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
