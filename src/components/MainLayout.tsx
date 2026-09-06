@@ -6,11 +6,12 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Car, Users, FileText, DollarSign,
   MapPin, TrendingUp, AlertTriangle, MessageSquareWarning,
-  Headphones, Star, Settings, Shield, LogOut, Menu, X, ChevronRight
+  Headphones, Star, Settings, Shield, LogOut, Menu, X, ChevronRight, CreditCard
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import type { AdminRole } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { APP_VERSION } from '@/lib/version';
 const urbontLogo = '/urbont-logo.png';
 
 interface NavItem {
@@ -34,6 +35,7 @@ const NAV_ITEMS: NavItem[] = [
   { name: 'complaints',  label: 'Quejas',           href: '/complaints', icon: MessageSquareWarning, roles: ['owner','support','operations'],                       group: 'ops' },
   { name: 'support',     label: 'Soporte',          href: '/support',    icon: Headphones,           roles: ['owner','support'],                                    group: 'ops' },
   { name: 'feedback',    label: 'Feedback',         href: '/feedback',   icon: Star,                 roles: ['owner','support','analyst'],                          group: 'ops' },
+  { name: 'financiero',  label: 'Financiero',       href: '/financiero', icon: CreditCard,           roles: ['owner','analyst'],                                    group: 'admin' },
   { name: 'system',      label: 'Sistema',          href: '/system',     icon: Settings,             roles: ['owner','developer'],                                  group: 'admin' },
   { name: 'users',       label: 'Admin Users',      href: '/users',      icon: Shield,               roles: ['owner'],                                              group: 'admin' },
 ];
@@ -172,6 +174,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           <LogOut className="w-3.5 h-3.5" />
           Cerrar sesión
         </button>
+        <p className="text-center text-white/25 text-[10px] mt-2" data-testid="app-version">
+          {APP_VERSION}
+        </p>
       </div>
     </div>
   );
