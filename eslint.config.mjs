@@ -19,7 +19,13 @@ export default [
       // backend no tiene contrato tipado (ver financiero-auth.ts). Avisar, no romper.
       '@typescript-eslint/no-explicit-any': 'warn',
       // Variables sin usar: aviso, y se permite el prefijo _ para descartes.
-      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      // `ignoreRestSiblings` cubre el idiom `const { x, ...resto } = obj` usado
+      // para omitir una clave sin escribir un helper.
+      '@typescript-eslint/no-unused-vars': ['warn', {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        ignoreRestSiblings: true,
+      }],
     },
   },
 ];

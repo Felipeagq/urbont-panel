@@ -2,38 +2,35 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { adminFetch } from '@/lib/api';
-import { formatDate, formatRelativeTime } from '@/lib/utils';
+import { formatRelativeTime } from '@/lib/utils';
 import {
-  Server, Database, RefreshCw, AlertTriangle, CheckCircle2,
-  Activity, Cpu, HardDrive, Clock, Zap, Settings, Shield,
-  XCircle, Wifi, MemoryStick, Search, Save, Loader2
+  Server, Database, RefreshCw, CheckCircle2, XCircle, AlertCircle, MinusCircle,
+  Cpu, MemoryStick, Shield, Settings, Search, Save, Loader2, Zap, Mail,
+  CreditCard, Map, Flame, MessageSquare, Network,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
 } from 'recharts';
+// Alias obligatorio: recharts también exporta `Tooltip`, y se usa en las gráficas.
+import {
+  Tooltip as HoverCard, TooltipTrigger as HoverCardTrigger, TooltipContent as HoverCardContent,
+} from '@/components/ui/tooltip';
+import {
+  mapSystemStats, statusMeta, usageTone, formatUptime, hace,
+  type SystemStats, type Tone, type IntegrationInfo,
+} from '@/lib/system-metrics';
 
-interface SystemStats {
-  uptime: number;
-  version: string;
-  nodeVersion: string;
-  platform: string;
-  memoryUsageMB: number;
-  memoryTotalMB?: number;
-  cpuUsage: number;
-  dbConnected: boolean;
-  redisConnected: boolean;
-  totalAdminUsers: number;
-  activeAdminUsers: number;
-  serverTime: string;
-  environment: string;
-  requestsPerMin?: number;
-  errorRate?: number;
-  avgResponseMs?: number;
-  activeRides?: number;
-  onlineDrivers?: number;
-}
+/**
+ * Pantalla Sistema.
+ *
+ * Los indicadores se leen tal cual los manda el backend (`GET /api/admin/system`);
+ * el mapeo vive en `@/lib/system-metrics` para poder testearlo sin montar React.
+ * Regla del módulo: un indicador inventado es peor que no tener indicador — si el
+ * backend no manda un dato, acá se muestra "—" o no se muestra la tarjeta, nunca
+ * un cero o un check verde de relleno.
+ */
 
 interface AuditLog {
   id: string;
@@ -46,14 +43,76 @@ interface AuditLog {
   ipAddress: string;
 }
 
-function formatUptime(s: number) {
-  const d = Math.floor(s / 86400);
-  const h = Math.floor((s % 86400) / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  if (d > 0) return `${d}d ${h}h ${m}m`;
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
+// ── Presentación de los estados (la lógica vive en @/lib/system-metrics) ─────
+
+const TONE_CLASSES: Record<Tone, { box: string; icon: string; title: string; note: string; chip: string }> = {
+  ok:      { box: 'bg-emerald-50 border-emerald-100', icon: 'bg-emerald-100 text-emerald-600', title: 'text-emerald-800', note: 'text-emerald-600', chip: 'text-emerald-500' },
+  error:   { box: 'bg-red-50 border-red-200',         icon: 'bg-red-100 text-red-600',         title: 'text-red-800',     note: 'text-red-600',     chip: 'text-red-500' },
+  warn:    { box: 'bg-amber-50 border-amber-100',     icon: 'bg-amber-100 text-amber-600',     title: 'text-amber-800',   note: 'text-amber-700',   chip: 'text-amber-500' },
+  neutral: { box: 'bg-gray-50 border-gray-200',       icon: 'bg-gray-100 text-gray-500',       title: 'text-gray-700',    note: 'text-gray-500',    chip: 'text-gray-400' },
+};
+
+const TONE_ICON = { ok: CheckCircle2, error: XCircle, warn: AlertCircle, neutral: MinusCircle };
+
+const USAGE_BAR: Record<Tone, string> = {
+  ok: 'bg-emerald-500', warn: 'bg-amber-500', error: 'bg-red-500', neutral: 'bg-gray-300',
+};
+
+/**
+ * Los dos caminos a la MISMA base de Supabase.
+ *
+ * Se rotulan con el camino, no con el proveedor, y ambos llevan "Supabase" en la
+ * línea de estado: cuando sólo una tarjeta lo decía, parecían dos bases
+ * distintas y una en rojo se leía como "se cayó una de las dos bases".
+ *
+ * No son redundantes — fallan por separado y rompen cosas distintas, que es lo
+ * que explica el `hint`.
+ */
+const DATABASE_PATHS = [
+  {
+    key: 'database',
+    // El proveedor va en el título —y no sólo en el tooltip— porque cuando una
+    // sola de las dos decía "Supabase" parecían dos bases distintas, y una en
+    // rojo se leía como "se cayó una de las dos".
+    label: 'Supabase · Conexión directa',
+    icon: Database,
+    hint: 'Usado en ~90 puntos del código. Si cae: migraciones, panel de '
+      + 'administración y auditoría. El resto de la app sigue.',
+  },
+  {
+    key: 'supabase',
+    label: 'Supabase · API de datos',
+    icon: Network,
+    hint: 'Usado en ~188 puntos del código — dos de cada tres consultas. '
+      + 'Si cae: se rompe casi todo — viajes, perfiles, notificaciones.',
+  },
+] as const;
+
+/**
+ * Comprobado en vivo, en cada llamada: es local y gratis. Trae `verifiedAt`,
+ * pero es el instante de la consulta — mostrar "hace 0 min" en cada refresco
+ * sólo agregaría ruido.
+ */
+const RUNTIME_SERVICES = [
+  { key: 'redis', label: 'Redis Cache', icon: Zap, hint: 'Adaptador de Socket.IO. Hará falta al pasar a dos contenedores.' },
+] as const;
+
+/**
+ * Verificados al arrancar el servidor, con el resultado guardado: requieren red
+ * y facturan. Verificar Google Maps en cada consulta costaría ~USD 864 al mes
+ * sólo por tener el panel abierto. De ahí que su tarjeta muestre "verificado al
+ * iniciar" — el sello es del arranque, no de una revisión pendiente.
+ */
+const STARTUP_INTEGRATIONS = [
+  { key: 'stripe', label: 'Stripe', icon: CreditCard },
+  { key: 'google_maps', label: 'Google Maps', icon: Map },
+  { key: 'firebase', label: 'Firebase', icon: Flame },
+  { key: 'twilio', label: 'Twilio', icon: MessageSquare },
+  // Email vive acá y no arriba: ya no informa sólo qué proveedor está activo,
+  // se verifica de verdad contra él (SendGrid /v3/scopes, Resend /domains,
+  // SMTP verify()). Detecta una clave que autentica pero no puede enviar.
+  { key: 'email', label: 'Email', icon: Mail },
+] as const;
 
 const ACTION_COLORS: Record<string, string> = {
   suspend: 'text-red-600',
@@ -84,25 +143,18 @@ export default function System() {
   const [savingConfig, setSavingConfig] = useState<string | null>(null);
   const [logSearch, setLogSearch] = useState('');
 
-  // Fake sparkline data (server metrics trend)
   const [memHistory, setMemHistory] = useState<{ t: string; v: number }[]>([]);
   const [cpuHistory, setCpuHistory] = useState<{ t: string; v: number }[]>([]);
 
-  const mapStats = (s: any): SystemStats => ({
-    uptime: s.uptime ?? 0,
-    version: s.uptimeFormatted ?? '',
-    nodeVersion: s.nodeVersion ?? '',
-    platform: s.environment ?? '',
-    memoryUsageMB: s.memory?.heapUsed ?? 0,
-    memoryTotalMB: s.memory?.heapTotal,
-    cpuUsage: 0,
-    dbConnected: s.apiStatus?.database === 'connected',
-    redisConnected: s.apiStatus?.supabase === 'connected',
-    totalAdminUsers: 0,
-    activeAdminUsers: 0,
-    serverTime: new Date().toISOString(),
-    environment: s.environment ?? 'development',
-  });
+  /** Agrega una muestra a las series. CPU se omite mientras venga null. */
+  const pushSamples = useCallback((mapped: SystemStats) => {
+    const now = new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+    setMemHistory(h => [...h.slice(-19), { t: now, v: Math.round(mapped.memory.usedMb) }]);
+    if (mapped.cpu.percent != null) {
+      const pct = mapped.cpu.percent;
+      setCpuHistory(h => [...h.slice(-19), { t: now, v: Math.round(pct * 10) / 10 }]);
+    }
+  }, []);
 
   const loadData = useCallback(async () => {
     try {
@@ -111,36 +163,33 @@ export default function System() {
         adminFetch('/audit-logs'),
         adminFetch('/config'),
       ]);
-      const mapped = mapStats(s);
+      const mapped = mapSystemStats(s);
       setStats(mapped);
       setLogs(l.logs ?? []);
       setConfig(c.config ?? {});
       setLocalConfig(c.config ?? {});
-      // Append to history
-      const now = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-      setMemHistory(h => [...h.slice(-19), { t: now, v: Math.round(mapped.memoryUsageMB) }]);
-      setCpuHistory(h => [...h.slice(-19), { t: now, v: Math.round(mapped.cpuUsage ?? 0) }]);
-    } catch (e: any) {
-      toast.error(e.message || 'Error al cargar el sistema');
+      pushSamples(mapped);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al cargar el sistema');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [pushSamples]);
 
   useEffect(() => {
     loadData();
     const interval = setInterval(async () => {
       try {
-        const s = await adminFetch('/system');
-        const mapped = mapStats(s);
+        const mapped = mapSystemStats(await adminFetch('/system'));
         setStats(mapped);
-        const now = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-        setMemHistory(h => [...h.slice(-19), { t: now, v: Math.round(mapped.memoryUsageMB) }]);
-        setCpuHistory(h => [...h.slice(-19), { t: now, v: Math.round(mapped.cpuUsage ?? 0) }]);
-      } catch {}
+        pushSamples(mapped);
+      } catch {
+        // Un fallo puntual del refresco automático no debe tapar la pantalla con
+        // un toast cada 15s; los datos en pantalla siguen siendo los últimos buenos.
+      }
     }, 15000);
     return () => clearInterval(interval);
-  }, [loadData]);
+  }, [loadData, pushSamples]);
 
   const handleConfigSave = async (key: string) => {
     setSavingConfig(key);
@@ -151,8 +200,8 @@ export default function System() {
       });
       toast.success('Configuración actualizada');
       setConfig(prev => ({ ...prev, [key]: localConfig[key] }));
-    } catch (e: any) {
-      toast.error(e.message || 'Error al guardar');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al guardar');
     } finally {
       setSavingConfig(null);
     }
@@ -180,7 +229,8 @@ export default function System() {
 
   if (!stats) return null;
 
-  const memPct = stats.memoryTotalMB ? (stats.memoryUsageMB / stats.memoryTotalMB) * 100 : null;
+  const memTone = usageTone(stats.memory.percent);
+  const cpuTone = usageTone(stats.cpu.percent);
 
   return (
     <div className="space-y-5">
@@ -189,7 +239,7 @@ export default function System() {
         <div>
           <h1 className="page-title" data-testid="page-title">Sistema</h1>
           <p className="text-sm text-gray-400 mt-0.5">
-            {stats.environment} · v{stats.version} · Node {stats.nodeVersion}
+            {stats.environment} · Node {stats.nodeVersion}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -203,80 +253,116 @@ export default function System() {
         </div>
       </div>
 
-      {/* Service status */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: 'API Server', ok: true, icon: Server, note: `Uptime: ${formatUptime(stats.uptime)}` },
-          { label: 'Base de datos', ok: stats.dbConnected, icon: Database, note: stats.dbConnected ? 'Conectado' : 'DESCONECTADO' },
-          { label: 'Redis Cache', ok: stats.redisConnected, icon: Zap, note: stats.redisConnected ? 'Conectado' : 'DESCONECTADO' },
-          { label: 'Entorno', ok: stats.environment === 'production', icon: Shield, note: stats.environment },
-        ].map(svc => (
-          <div key={svc.label} className={`rounded-xl border p-3.5 flex items-center gap-3 ${svc.ok ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-200'}`}>
-            <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${svc.ok ? 'bg-emerald-100' : 'bg-red-100'}`}>
-              <svc.icon className={`w-5 h-5 ${svc.ok ? 'text-emerald-600' : 'text-red-600'}`} />
-            </div>
-            <div>
-              <p className={`text-xs font-semibold ${svc.ok ? 'text-emerald-800' : 'text-red-800'}`}>{svc.label}</p>
-              <p className={`text-[10px] ${svc.ok ? 'text-emerald-600' : 'text-red-600'}`}>{svc.note}</p>
-            </div>
-            {svc.ok
-              ? <CheckCircle2 className="w-4 h-4 text-emerald-500 ml-auto flex-shrink-0" />
-              : <XCircle className="w-4 h-4 text-red-500 ml-auto flex-shrink-0" />
-            }
-          </div>
+      {/* Runtime del servidor */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <StatusCard label="API Server" icon={Server} tone="ok" note={`Uptime: ${formatUptime(stats.uptime)}`} />
+        {RUNTIME_SERVICES.map(({ key, label, icon, hint }) => (
+          <IntegrationCard
+            key={key} label={label} icon={icon} hint={hint}
+            info={stats.integrations[key]}
+            fallbackStatus={stats.apiStatus[key]}
+            fallbackSummary={stats.checkDetail[key]}
+          />
         ))}
+        <StatusCard
+          label="Entorno"
+          icon={Shield}
+          tone={stats.environment === 'production' ? 'ok' : 'warn'}
+          note={stats.environment}
+        />
       </div>
 
-      {/* KPI metrics row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          {
-            label: 'Memoria en uso',
-            value: `${stats.memoryUsageMB.toFixed(0)} MB`,
-            sub: memPct ? `${memPct.toFixed(0)}% del total` : 'de RAM del servidor',
-            icon: MemoryStick,
-            pct: memPct,
-            barColor: memPct && memPct > 85 ? 'bg-red-500' : memPct && memPct > 65 ? 'bg-amber-500' : 'bg-emerald-500',
-          },
-          {
-            label: 'Uso de CPU',
-            value: `${(stats.cpuUsage ?? 0).toFixed(1)}%`,
-            sub: 'carga actual del servidor',
-            icon: Cpu,
-            pct: stats.cpuUsage,
-            barColor: (stats.cpuUsage ?? 0) > 80 ? 'bg-red-500' : (stats.cpuUsage ?? 0) > 60 ? 'bg-amber-500' : 'bg-blue-500',
-          },
-          {
-            label: 'Req / minuto',
-            value: stats.requestsPerMin != null ? stats.requestsPerMin.toLocaleString() : '—',
-            sub: 'solicitudes entrantes',
-            icon: Activity,
-            pct: null,
-            barColor: 'bg-violet-500',
-          },
-          {
-            label: 'Tiempo respuesta',
-            value: stats.avgResponseMs != null ? `${stats.avgResponseMs}ms` : '—',
-            sub: 'latencia media API',
-            icon: Clock,
-            pct: null,
-            barColor: 'bg-blue-500',
-          },
-        ].map(k => (
-          <div key={k.label} className="bg-white rounded-xl border border-gray-100 p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs text-gray-500">{k.label}</p>
-              <k.icon className="w-4 h-4 text-gray-300" />
-            </div>
-            <p className="text-xl font-bold text-gray-900">{k.value}</p>
-            <p className="text-[11px] text-gray-400 mt-0.5">{k.sub}</p>
-            {k.pct != null && (
-              <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                <div className={`h-full ${k.barColor} rounded-full transition-all duration-700`} style={{ width: `${Math.min(100, k.pct)}%` }} />
-              </div>
-            )}
+      {/* Base de datos: dos caminos, un solo Supabase */}
+      <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
+        <div className="flex items-baseline justify-between mb-3">
+          <h2 className="text-sm font-semibold text-gray-800">Base de datos</h2>
+          <p className="text-[11px] text-gray-400">
+            Dos caminos al mismo proyecto de Supabase · pueden fallar por separado
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {DATABASE_PATHS.map(({ key, label, icon, hint }) => (
+            <IntegrationCard
+              key={key} label={label} icon={icon} hint={hint}
+              info={stats.integrations[key]}
+              fallbackStatus={stats.apiStatus[key]}
+              fallbackSummary={stats.checkDetail[key]}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Recursos del contenedor */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs text-gray-500">Memoria en uso</p>
+            <MemoryStick className="w-4 h-4 text-gray-300" />
           </div>
-        ))}
+          <p className="text-xl font-bold text-gray-900">{stats.memory.usedMb.toFixed(0)} MB</p>
+          <p className="text-[11px] text-gray-400 mt-0.5">
+            {stats.memory.limitMb > 0
+              ? `${stats.memory.percent.toFixed(1)}% de ${stats.memory.limitMb} MB`
+              : 'límite del contenedor no informado'}
+          </p>
+          <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              className={`h-full ${USAGE_BAR[memTone]} rounded-full transition-all duration-700`}
+              style={{ width: `${Math.min(100, stats.memory.percent)}%` }}
+            />
+          </div>
+          {stats.memory.heapUsedMb != null && (
+            <p className="text-[10px] text-gray-400 mt-2">
+              Heap V8: {stats.memory.heapUsedMb} / {stats.memory.heapTotalMb} MB · diagnóstico, no capacidad
+            </p>
+          )}
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs text-gray-500">Uso de CPU</p>
+            <Cpu className="w-4 h-4 text-gray-300" />
+          </div>
+          <p className="text-xl font-bold text-gray-900">
+            {stats.cpu.percent == null ? '—' : `${stats.cpu.percent.toFixed(1)}%`}
+          </p>
+          <p className="text-[11px] text-gray-400 mt-0.5">
+            {stats.cpu.percent == null
+              ? 'esperando segunda muestra'
+              : `de ${stats.cpu.vcpu} vCPU asignado`}
+          </p>
+          <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              className={`h-full ${USAGE_BAR[cpuTone]} rounded-full transition-all duration-700`}
+              style={{ width: `${Math.min(100, stats.cpu.percent ?? 0)}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Integraciones — `configured` en ámbar: existe la credencial, nadie la verificó */}
+      <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
+        <div className="flex items-baseline justify-between mb-3">
+          <h2 className="text-sm font-semibold text-gray-800">Integraciones externas</h2>
+          <p className="text-[11px] text-gray-400">Verificadas al arrancar el servidor</p>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {STARTUP_INTEGRATIONS.map(({ key, label, icon }) => (
+            <IntegrationCard
+              key={key}
+              label={label}
+              icon={icon}
+              // `integrations` es la fuente completa; los campos planos
+              // (apiStatus/verifiedAt/checkDetail) son el respaldo si el backend
+              // todavía no manda el objeto nuevo.
+              info={stats.integrations[key]}
+              fallbackStatus={stats.apiStatus[key]}
+              fallbackVerifiedAt={stats.verifiedAt[key]}
+              fallbackSummary={stats.checkDetail[key]}
+              startupVerified
+            />
+          ))}
+        </div>
       </div>
 
       {/* Charts */}
@@ -306,7 +392,9 @@ export default function System() {
         <div className="bg-white rounded-xl border border-gray-100 p-4">
           <p className="text-sm font-semibold text-gray-800 mb-4">CPU (%) — en tiempo real</p>
           {cpuHistory.length < 2 ? (
-            <div className="h-32 flex items-center justify-center text-xs text-gray-400">Recopilando datos...</div>
+            <div className="h-32 flex items-center justify-center text-xs text-gray-400">
+              {stats.cpu.percent == null ? 'Esperando la segunda lectura de CPU...' : 'Recopilando datos...'}
+            </div>
           ) : (
             <ResponsiveContainer width="100%" height={120}>
               <AreaChart data={cpuHistory} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
@@ -319,7 +407,10 @@ export default function System() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                 <XAxis dataKey="t" tick={{ fontSize: 10, fill: '#9ca3af' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
                 <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} tickLine={false} axisLine={false} domain={[0, 100]} />
-                <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e5e7eb' }} formatter={(v: any) => [`${v}%`, 'CPU']} />
+                <Tooltip
+                  contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e5e7eb' }}
+                  formatter={(v: number | string) => [`${v}%`, 'CPU']}
+                />
                 <Area type="monotone" dataKey="v" stroke="#7c3aed" strokeWidth={2} fill="url(#cpuGrad)" name="%" dot={false} />
               </AreaChart>
             </ResponsiveContainer>
@@ -419,6 +510,179 @@ export default function System() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Componentes de apoyo ─────────────────────────────────────────────────────
+
+/**
+ * Tarjeta de integración externa: resumen en la tarjeta, verificación completa
+ * en el tooltip.
+ *
+ * El detalle no cabe —ni conviene— en la tarjeta: son hasta 8 filas por
+ * integración. Pero tampoco puede quedar sólo en los logs del servidor, que es
+ * donde estaba cuando la credencial rota de Firebase tardó días en aparecer.
+ */
+function IntegrationCard({ label, icon, info, fallbackStatus, fallbackVerifiedAt, fallbackSummary, startupVerified, hint }: {
+  label: string;
+  icon: React.ElementType;
+  info?: IntegrationInfo;
+  fallbackStatus?: string;
+  fallbackVerifiedAt?: string;
+  fallbackSummary?: string | null;
+  /**
+   * Distingue las cinco externas (verificadas al arrancar) de las tres locales.
+   * En las locales `verifiedAt` es el instante de la consulta: mostrar "hace 0
+   * min" en cada refresco de 15s sería ruido, no información.
+   */
+  startupVerified?: boolean;
+  /** Qué se rompe si falla. Va al tooltip nativo cuando no hay uno enriquecido. */
+  hint?: string;
+}) {
+  const status = info?.status ?? fallbackStatus;
+  const meta = statusMeta(status);
+  const verifiedAt = info?.verifiedAt ?? fallbackVerifiedAt ?? undefined;
+  // En un fallo el summary ES el motivo del proveedor, así que va en la tarjeta.
+  const summary = info?.summary ?? fallbackSummary ?? null;
+  const hasDetail = Boolean(info && (info.details.length > 0 || info.probe));
+
+  const card = (
+    <StatusCard
+      label={label}
+      icon={icon}
+      tone={meta.tone}
+      note={summary || meta.label}
+      status={status}
+      verifiedAt={startupVerified ? verifiedAt : undefined}
+      startupVerified={startupVerified}
+      hint={hasDetail ? undefined : hint}
+      // El tooltip de Radix ya muestra el texto completo; dejar además el title
+      // nativo abriría dos tooltips encimados sobre la misma tarjeta.
+      noNativeTitle={hasDetail}
+    />
+  );
+
+  // Sin detalle no hay nada que mostrar al pasar el cursor: un tooltip vacío
+  // sólo enseña al usuario que no vale la pena volver a intentarlo.
+  if (!hasDetail) return card;
+
+  return (
+    <HoverCard delayDuration={200}>
+      <HoverCardTrigger asChild>
+        <div className="cursor-help">{card}</div>
+      </HoverCardTrigger>
+      <HoverCardContent
+        side="bottom"
+        align="start"
+        className="max-w-none bg-white text-gray-800 border border-gray-200 shadow-lg p-0"
+      >
+        <DetalleVerificacion
+          label={label} info={info!} tone={meta.tone} startupVerified={startupVerified}
+        />
+      </HoverCardContent>
+    </HoverCard>
+  );
+}
+
+function DetalleVerificacion({ label, info, tone, startupVerified }: {
+  label: string;
+  info: IntegrationInfo;
+  tone: Tone;
+  startupVerified?: boolean;
+}) {
+  return (
+    <div className="w-[340px] p-3 space-y-2">
+      <div>
+        <p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">{label}</p>
+        <p className={`text-xs font-semibold ${tone === 'error' ? 'text-red-700' : 'text-gray-900'}`}>
+          {info.summary ?? statusMeta(info.status).label}
+        </p>
+      </div>
+
+      {/* Cómo se verificó: la llamada exacta, para poder reproducirla a mano. */}
+      {info.probe && (
+        <p className="text-[10px] text-gray-500 font-mono break-all">
+          {info.probe}
+          {info.latencyMs != null && ` · ${info.latencyMs} ms`}
+        </p>
+      )}
+
+      {info.details.length > 0 && (
+        <dl className="divide-y divide-gray-100 border-t border-gray-100 pt-1">
+          {info.details.map(({ label: k, value }) => (
+            <div key={k} className="flex gap-3 py-1">
+              <dt className="text-[11px] text-gray-500 flex-shrink-0 w-[42%]">{k}</dt>
+              <dd className="text-[11px] text-gray-900 font-medium break-words min-w-0 flex-1">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+
+      {/* En las locales el sello es el instante de esta consulta, así que un
+          "hace X" diría siempre "recién" y sugeriría una antigüedad inexistente. */}
+      <p className="text-[10px] text-gray-400 border-t border-gray-100 pt-1.5">
+        {startupVerified
+          ? `Verificado al iniciar el servidor · ${hace(info.verifiedAt)}`
+          : 'Comprobado en vivo, en esta consulta'}
+      </p>
+    </div>
+  );
+}
+
+function StatusCard({ label, icon: Icon, tone, note, verifiedAt, detail, status, startupVerified, noNativeTitle, hint }: {
+  label: string;
+  icon: React.ElementType;
+  tone: Tone;
+  note: string;
+  /** ISO de la verificación guardada. Sólo lo traen las integraciones externas. */
+  verifiedAt?: string;
+  /** Lo que devolvió la comprobación; puede venir null. */
+  detail?: string | null;
+  status?: string;
+  /** Cambia la redacción del sello para que no se lea como revisión pendiente. */
+  startupVerified?: boolean;
+  /** Se activa cuando un tooltip externo ya muestra el texto completo. */
+  noNativeTitle?: boolean;
+  /** Qué es y qué se rompe si falla. Va al tooltip nativo de la tarjeta. */
+  hint?: string;
+}) {
+  const c = TONE_CLASSES[tone];
+  const ToneIcon = TONE_ICON[tone];
+
+  // "Sin configurar" no tiene antigüedad que mostrar: nunca hubo comprobación.
+  const showAge = verifiedAt && status !== 'not_configured';
+  // El detalle sólo aporta cuando algo falló: es el motivo real, tal cual lo
+  // devuelve el proveedor. Ese "invalid_grant: Invalid JWT Signature" es lo que
+  // costó días descubrir a mano.
+  const showDetail = status === 'disconnected' && detail;
+  // En verde el detalle sí informa ("livemode", "Full · +1786…"), pero ocupa
+  // lugar sin ser accionable: va al tooltip, no a la tarjeta.
+  const noteTitle = detail && !showDetail ? `${note} — ${detail}` : note;
+
+  return (
+    <div className={`rounded-xl border p-3.5 flex items-start gap-3 ${c.box}`} title={hint}>
+      <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${c.icon}`}>
+        <Icon className="w-5 h-5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className={`text-xs font-semibold ${c.title}`}>{label}</p>
+        <p className={`text-[10px] ${c.note} truncate`} title={noNativeTitle ? undefined : noteTitle}>{note}</p>
+        {showAge && (
+          <p className={`text-[10px] ${c.note} opacity-70 truncate`}>
+            {startupVerified ? 'verificado al iniciar · ' : ''}{hace(verifiedAt)}
+          </p>
+        )}
+        {showDetail && (
+          <p
+            className="text-[10px] text-red-700 font-mono mt-1 line-clamp-2 break-words"
+            title={detail}
+          >
+            {detail}
+          </p>
+        )}
+      </div>
+      <ToneIcon className={`w-4 h-4 ${c.chip} flex-shrink-0`} />
     </div>
   );
 }
