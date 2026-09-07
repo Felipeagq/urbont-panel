@@ -164,7 +164,7 @@ export default function PassengerDrawer({ passenger, onClose, onRefresh }: Passe
         <div className="grid grid-cols-3 divide-x divide-gray-100 border-b border-gray-100 flex-shrink-0">
           {[
             { label: 'Total Viajes', value: passenger.totalRides.toLocaleString(), icon: MapPin, color: 'text-blue-600' },
-            { label: 'Calificación', value: (passenger.rating || 0).toFixed(2), icon: Star, color: 'text-amber-500' },
+            { label: 'Calificación', value: (passenger.rating != null ? passenger.rating.toFixed(2) : '—'), icon: Star, color: 'text-amber-500' },
             { label: 'Total Gastado', value: formatCurrency(passenger.totalSpent), icon: CreditCard, color: 'text-violet-600' },
           ].map(k => (
             <div key={k.label} className="p-4 text-center">

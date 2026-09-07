@@ -13,13 +13,14 @@ interface FeedbackItem {
   userName: string;
   driverId: string;
   driverName: string;
-  rating: number;
+  rating: number | null;
   comment: string;
   createdAt: string;
   rideId: string;
 }
 
-function StarRow({ rating, size = 'sm' }: { rating: number; size?: 'sm' | 'lg' }) {
+function StarRow({ rating, size = 'sm' }: { rating: number | null; size?: 'sm' | 'lg' }) {
+  if (rating == null) return <span className="text-gray-400 text-xs">—</span>;
   const sz = size === 'lg' ? 'w-6 h-6' : 'w-3.5 h-3.5';
   return (
     <div className="flex gap-0.5">
@@ -52,7 +53,7 @@ export default function FeedbackPage() {
         userName: f.is_anonymous ? 'Anónimo' : (f.user_id || 'Usuario'),
         driverId: f.chauffeur_id,
         driverName: f.chauffeur_id || 'N/A',
-        rating: f.rating ?? 0,
+        rating: f.rating ?? null,
         comment: f.comment ?? '',
         createdAt: f.created_at,
         rideId: f.trip_id,

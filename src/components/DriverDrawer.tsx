@@ -172,7 +172,7 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
         <div className="grid grid-cols-4 divide-x divide-gray-100 border-b border-gray-100 flex-shrink-0">
           {[
             { label: 'Viajes', value: driver.ridesCompleted.toLocaleString(), icon: MapPin, color: 'text-blue-600' },
-            { label: 'Rating', value: (driver.rating || 0).toFixed(2), icon: Star, color: 'text-amber-500' },
+            { label: 'Rating', value: (driver.rating != null ? driver.rating.toFixed(2) : '—'), icon: Star, color: 'text-amber-500' },
             { label: 'Ganancias', value: formatCurrency(driver.totalEarnings), icon: DollarSign, color: 'text-emerald-600' },
             { label: 'Último viaje', value: driver.lastRide ? formatRelativeTime(driver.lastRide) : '—', icon: Clock, color: 'text-gray-400' },
           ].map(k => (

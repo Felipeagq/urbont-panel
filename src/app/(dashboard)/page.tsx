@@ -273,7 +273,7 @@ export default function Overview() {
               { label: 'Conductores Online', value: data.driversOnline, icon: Car, color: 'text-emerald-600', bg: 'bg-emerald-50' },
               { label: 'Viajes esta Semana', value: data.ridesThisWeek.toLocaleString(), icon: MapPin, color: 'text-blue-600', bg: 'bg-blue-50' },
               { label: 'Ingreso Semanal', value: formatCurrency(data.revenueThisWeek), icon: DollarSign, color: 'text-violet-600', bg: 'bg-violet-50' },
-              { label: 'Calificación Media', value: (data.avgRating || 0).toFixed(2), icon: Star, color: 'text-amber-500', bg: 'bg-amber-50' },
+              { label: 'Calificación Media', value: (data.avgRating != null ? data.avgRating.toFixed(2) : '—'), icon: Star, color: 'text-amber-500', bg: 'bg-amber-50' },
             ].map((m) => {
               const MIcon = m.icon;
               return (
