@@ -169,3 +169,30 @@
     background-color: rgba(255,255,255,0.08);
   }
 }
+
+/*
+ * Modo impresión / exportar a PDF.
+ *
+ * Genérico para todo el panel (no sólo Financiero): al imprimir cualquier
+ * página del dashboard, nadie quiere el sidebar ni la barra superior en el
+ * PDF, sólo el contenido. Cada página puede además usar la clase utilitaria
+ * `print:hidden` de Tailwind para ocultar sus propios controles interactivos.
+ */
+@media print {
+  /* Sidebar (desktop y mobile) y header quedan afuera del reporte. */
+  [data-app-sidebar], [data-app-header] {
+    display: none !important;
+  }
+
+  /* El layout usa flex + overflow para el scroll interno; en impresión eso
+     recorta contenido a una sola "pantalla". Sin overflow, el navegador
+     puede paginar el documento completo en varias hojas. */
+  [data-app-main] {
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  body {
+    background: white !important;
+  }
+}

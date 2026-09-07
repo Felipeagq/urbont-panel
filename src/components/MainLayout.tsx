@@ -192,17 +192,20 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       )}
 
       {/* Sidebar — desktop */}
-      <div className="hidden lg:flex lg:w-[248px] lg:flex-shrink-0 lg:flex-col">
+      <div data-app-sidebar className="hidden lg:flex lg:w-[248px] lg:flex-shrink-0 lg:flex-col">
         <div className="fixed h-screen w-[248px]">
           <SidebarContent />
         </div>
       </div>
 
       {/* Sidebar — mobile */}
-      <div className={cn(
-        'fixed inset-y-0 left-0 z-50 w-[248px] lg:hidden transition-transform duration-300 ease-out',
-        mobileOpen ? 'translate-x-0' : '-translate-x-full'
-      )}>
+      <div
+        data-app-sidebar
+        className={cn(
+          'fixed inset-y-0 left-0 z-50 w-[248px] lg:hidden transition-transform duration-300 ease-out',
+          mobileOpen ? 'translate-x-0' : '-translate-x-full'
+        )}
+      >
         <SidebarContent />
         <button
           onClick={() => setMobileOpen(false)}
@@ -215,7 +218,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top bar */}
-        <header className="h-14 bg-white border-b border-gray-100 flex items-center px-4 sm:px-6 flex-shrink-0 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+        <header data-app-header className="h-14 bg-white border-b border-gray-100 flex items-center px-4 sm:px-6 flex-shrink-0 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           <button
             className="lg:hidden mr-3 p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
             onClick={() => setMobileOpen(true)}
@@ -246,7 +249,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         </header>
 
         {/* Content */}
-        <main className="flex-1 overflow-y-auto">
+        <main data-app-main className="flex-1 overflow-y-auto">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
             {children}
           </div>

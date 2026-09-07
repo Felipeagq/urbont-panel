@@ -8,7 +8,7 @@ import {
 } from '@/lib/financiero-date-range';
 import {
   AlertTriangle, Calendar, RefreshCw, BarChart3, MessageCircle, Cloud,
-  ShieldAlert, TrendingUp, TrendingDown, Minus,
+  ShieldAlert, TrendingUp, TrendingDown, Minus, History, Printer,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -36,7 +36,17 @@ interface AwsData {
   cachedAt?: string;
 }
 
-type Tab = 'summary' | 'twilio' | 'aws';
+interface AuditEntry {
+  at: string;
+  actor: string;
+  role: string;
+  ip: string;
+  path: string;
+  outcome: 'granted' | 'denied';
+  reason?: string;
+}
+
+type Tab = 'summary' | 'twilio' | 'aws' | 'audit';
 
 // ── Formato (USD: ambos proveedores facturan en dólares) ─────────────────────
 
@@ -88,6 +98,11 @@ export default function FinancieroPage() {
   // Se incrementa para forzar una recarga cuando el rango no cambió.
   const [refreshNonce, setRefreshNonce] = useState(0);
 
+  // Auditoría: sólo la pide un owner, y sólo cuando abre esa pestaña.
+  const [auditLog, setAuditLog] = useState<AuditEntry[] | null>(null);
+  const [loadingAudit, setLoadingAudit] = useState(false);
+  const [auditError, setAuditError] = useState<string | null>(null);
+
   const useCustom = Boolean(customStart && customEnd && customStart <= customEnd);
   const [start, end] = useMemo(
     () => (useCustom ? [customStart, customEnd] : resolvePreset(preset)),
@@ -96,6 +111,7 @@ export default function FinancieroPage() {
   const rangeKey = `${start}|${end}`;
 
   const canAccess = !!user && (user.role === 'owner' || user.role === 'analyst');
+  const isOwner = user?.role === 'owner';
 
   const call = useCallback(async (path: string) => {
     // Nota: NO usar adminFetch — prefija /api/admin, que cae en el proxy catch-all
@@ -160,6 +176,22 @@ export default function FinancieroPage() {
     if (awsLoadedRange && awsLoadedRange !== rangeKey) setAws(null);
   }, [rangeKey, awsLoadedRange]);
 
+  // Auditoría no depende del rango de fechas (es "quién entró", no un reporte
+  // de costos), así que se carga una sola vez, bajo demanda.
+  const loadAudit = useCallback(async () => {
+    if (loadingAudit || auditLog) return;
+    setLoadingAudit(true);
+    setAuditError(null);
+    try {
+      const data = await call('/api/financiero/audit-log');
+      setAuditLog(data.entries ?? []);
+    } catch (err) {
+      setAuditError(describeError(err, 'el registro de auditoría'));
+    } finally {
+      setLoadingAudit(false);
+    }
+  }, [call, loadingAudit, auditLog]);
+
   // AWS se carga solo, junto con Twilio: si el resumen arranca con AWS vacío
   // parece que el módulo no trae los datos. El gasto queda acotado por el caché
   // del servidor, que sirve el mismo rango sin volver a consultar Cost Explorer.
@@ -197,14 +229,20 @@ export default function FinancieroPage() {
 
   return (
     <div className="space-y-4">
-      {/* Cabecera: título y filtro comparten fila para no gastar alto vertical */}
+      {/* Cabecera: título y filtro comparten fila para no gastar alto vertical.
+          Sólo los controles interactivos llevan print:hidden — el título se
+          imprime, los presets/fechas/botones no aportan nada en el PDF. */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="page-title">Financiero</h1>
           <p className="text-[13px] text-gray-500">Gastos de infraestructura · Twilio + AWS</p>
+          {/* Sólo visible al imprimir: dice quién y cuándo generó el reporte. */}
+          <p className="hidden print:block text-[11px] text-gray-400 mt-1">
+            Generado por {user?.name ?? 'desconocido'} · {new Date().toLocaleString('es-CO')}
+          </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 print:hidden">
           <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5">
             {PRESETS.map((p) => (
               <button
@@ -244,6 +282,16 @@ export default function FinancieroPage() {
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loadingTwilio ? 'animate-spin' : ''}`} />
           </button>
+
+          <button
+            onClick={() => window.print()}
+            disabled={!twilio}
+            className="btn-outline flex items-center gap-1.5 py-1.5! disabled:opacity-50"
+            title={awsFresh ? 'Exportar/imprimir el reporte completo (Twilio + AWS)' : 'Abrí la pestaña AWS antes de exportar para incluir sus datos'}
+          >
+            <Printer className="w-3.5 h-3.5" />
+            Exportar
+          </button>
         </div>
       </div>
 
@@ -261,16 +309,19 @@ export default function FinancieroPage() {
       )}
 
       {/* Pestañas */}
-      <div className="border-b border-gray-200">
+      <div className="border-b border-gray-200 print:hidden">
         <div className="flex gap-6">
           {([
             { id: 'summary', label: 'Resumen', icon: BarChart3 },
             { id: 'twilio', label: 'Twilio', icon: MessageCircle },
             { id: 'aws', label: 'AWS', icon: Cloud },
+            // Sólo owner: es un dato sobre quién más accede al módulo, no un
+            // reporte de costos — un analyst no necesita verlo.
+            ...(isOwner ? [{ id: 'audit', label: 'Auditoría', icon: History }] as const : []),
           ] as const).map(({ id, label, icon: Icon }) => (
             <button
               key={id}
-              onClick={() => { setTab(id); if (id === 'aws') loadAws(); }}
+              onClick={() => { setTab(id); if (id === 'aws') loadAws(); if (id === 'audit') loadAudit(); }}
               className={`flex items-center gap-2 pb-2.5 text-[13.5px] font-medium border-b-2 -mb-px transition-colors ${
                 tab === id
                   ? 'border-(--brand) text-(--brand)'
@@ -285,8 +336,11 @@ export default function FinancieroPage() {
       </div>
 
       {/* ── Resumen ────────────────────────────────────────────────────────── */}
-      {tab === 'summary' && (
-        loadingTwilio ? <MetricSkeleton /> : twilio && (
+      {/* Siempre montado (no gated por `tab === 'summary'`) para que el modo
+          impresión pueda mostrar las cuatro secciones apiladas a la vez; en
+          pantalla, `hidden` la oculta salvo que sea la pestaña activa. */}
+      <div className={`${tab === 'summary' ? 'block' : 'hidden'} print:block`}>
+      {loadingTwilio ? <MetricSkeleton /> : twilio && (
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Metric
@@ -344,12 +398,12 @@ export default function FinancieroPage() {
               </div>
             )}
           </div>
-        )
-      )}
+        )}
+      </div>
 
       {/* ── Twilio ─────────────────────────────────────────────────────────── */}
-      {tab === 'twilio' && (
-        loadingTwilio ? <MetricSkeleton /> : twilio && (
+      <div className={`${tab === 'twilio' ? 'block' : 'hidden'} print:block print:mt-6`}>
+      {loadingTwilio ? <MetricSkeleton /> : twilio && (
           <div className="space-y-4">
             {/* Cuenta completa primero: WhatsApp es una parte, no el todo. */}
             <div className="stat-card">
@@ -437,12 +491,12 @@ export default function FinancieroPage() {
               SMS, números, registro A2P, Amazon Polly, etc.
             </p>
           </div>
-        )
-      )}
+        )}
+      </div>
 
       {/* ── AWS ────────────────────────────────────────────────────────────── */}
-      {tab === 'aws' && (
-        loadingAws ? <MetricSkeleton /> : !awsFresh ? (
+      <div className={`${tab === 'aws' ? 'block' : 'hidden'} print:block print:mt-6`}>
+      {loadingAws ? <MetricSkeleton /> : !awsFresh ? (
           <div className="space-y-3">
             {awsError && <ErrorNote message={awsError} onRetry={() => loadAws(true)} />}
             <div className="stat-card text-center py-10">
@@ -517,7 +571,62 @@ export default function FinancieroPage() {
               </table>
             </div>
           </div>
-        )
+        )}
+      </div>
+
+      {/* ── Auditoría (sólo owner) ─────────────────────────────────────────── */}
+      {isOwner && (
+        <div className={`${tab === 'audit' ? 'block' : 'hidden'} print:block print:mt-6`}>
+          {loadingAudit ? <MetricSkeleton /> : (
+            <div className="space-y-4">
+              {auditError && <ErrorNote message={auditError} onRetry={() => { setAuditLog(null); loadAudit(); }} />}
+              <p className="text-[12px] text-gray-500 leading-relaxed">
+                Quién entró al módulo Financiero, más reciente primero. Vive en memoria del servidor:
+                se reinicia con cada despliegue y no se comparte entre instancias — es una vista rápida
+                de actividad reciente, no un registro de auditoría permanente.
+              </p>
+              {auditLog && (
+                <div className="stat-card overflow-x-auto">
+                  <table className="w-full text-[13px]">
+                    <thead>
+                      <tr className="text-left text-gray-500 border-b border-gray-100">
+                        <th className="pb-2 font-medium">Fecha/hora</th>
+                        <th className="pb-2 font-medium">Usuario</th>
+                        <th className="pb-2 font-medium">Rol</th>
+                        <th className="pb-2 font-medium">IP</th>
+                        <th className="pb-2 font-medium">Ruta</th>
+                        <th className="pb-2 font-medium text-right">Resultado</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {auditLog.map((e, i) => (
+                        <tr key={i} className="table-row-hover">
+                          <td className="py-2 text-gray-700 whitespace-nowrap">
+                            {new Date(e.at).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}
+                          </td>
+                          <td className="py-2 text-gray-700">{e.actor}</td>
+                          <td className="py-2 text-gray-500">{e.role}</td>
+                          <td className="py-2 text-gray-500 tabular-nums">{e.ip}</td>
+                          <td className="py-2 text-gray-400 font-mono text-[11.5px]">{e.path}</td>
+                          <td className="py-2 text-right">
+                            {e.outcome === 'granted' ? (
+                              <span className="text-emerald-600 font-medium">Concedido</span>
+                            ) : (
+                              <span className="text-red-600 font-medium" title={e.reason}>Denegado</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                      {auditLog.length === 0 && (
+                        <tr><td colSpan={6} className="py-6 text-center text-gray-400">Sin actividad registrada todavía</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
