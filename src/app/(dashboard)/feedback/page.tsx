@@ -230,7 +230,7 @@ export default function FeedbackPage() {
                       <StarRow rating={f.rating} />
                       <p className="text-[10px] text-gray-400 mt-1">{formatRelativeTime(f.createdAt)}</p>
                     </div>
-                    <p className="text-sm text-gray-700 italic leading-snug line-clamp-2">"{f.comment}"</p>
+                    <p className="text-sm text-gray-700 italic leading-snug line-clamp-2">&quot;{f.comment}&quot;</p>
                     <p className="text-sm text-gray-600 truncate">{f.userName}</p>
                     <p className="text-sm text-gray-600 truncate">{f.driverName}</p>
                   </div>

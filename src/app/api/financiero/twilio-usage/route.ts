@@ -1,51 +1,19 @@
 import type { NextRequest } from 'next/server';
 import { requireFinancieroAccess } from '@/lib/financiero-auth';
+import { aggregateTwilioUsage, type RawUsageRecord } from '@/lib/twilio-usage';
 
 /**
  * Twilio Usage Records → costo de WhatsApp en un rango de fechas.
  *
- * Reglas de facturación (docs/financiero.md §4): Twilio cobra en dos capas
- * independientes y cada una YA es la suma de sus propias sub-categorías. Sumar
- * todas las categorías que devuelve la API infla el total 2-3×.
+ * Este handler sólo se ocupa de auth, parámetros y de hablar con Twilio: la
+ * agregación (que es donde un error se vuelve una cifra equivocada) vive en
+ * `@/lib/twilio-usage`, aparte, para poder testearla sin servidor de por medio.
  *
- * El desglose se calcula acá y no en el cliente: la API devuelve ~520 categorías
- * (casi todas en cero) y `price`/`count` vienen como STRING, no como número.
+ * El desglose se calcula en el servidor y no en el cliente: la API devuelve
+ * ~520 categorías (casi todas en cero) y `price`/`count` vienen como STRING.
  */
 
 export const dynamic = 'force-dynamic';
-
-// Las dos únicas categorías que suman al total.
-const PARENT_MESSAGING = 'channels-messaging';
-const PARENT_WHATSAPP = 'channels-whatsapp';
-
-/**
- * Categorías de WhatsApp que ya conocemos: o son una capa padre, o son desglose
- * de una. Cualquier otra categoría con "whatsapp" y precio > 0 cae en "Otros"
- * (ver más abajo) para que un tipo de plantilla nuevo de Meta no haga desaparecer
- * plata del reporte en silencio.
- */
-function isKnownWhatsappCategory(category: string): boolean {
-  return (
-    category === PARENT_WHATSAPP ||
-    category.startsWith('channels-whatsapp-template-') ||
-    category.startsWith('channels-whatsapp-conversation-') ||
-    category === 'channels-whatsapp-inbound' ||
-    category === 'channels-whatsapp-outbound'
-  );
-}
-
-interface RawUsageRecord {
-  category: string;
-  count: string;
-  price: string;
-  usage_unit?: string;
-}
-
-/** La API devuelve números como string ("15.09"). Sumarlos sin parsear los concatena. */
-function num(value: string | number | undefined): number {
-  const n = typeof value === 'number' ? value : parseFloat(value ?? '0');
-  return Number.isFinite(n) ? n : 0;
-}
 
 export async function GET(req: NextRequest) {
   const auth = await requireFinancieroAccess(req);
@@ -94,65 +62,8 @@ export async function GET(req: NextRequest) {
     }
 
     const raw: RawUsageRecord[] = (await upstream.json()).usage_records ?? [];
-    const byCategory = new Map(raw.map((r) => [r.category, r]));
 
-    const pick = (category: string) => {
-      const r = byCategory.get(category);
-      return { category, count: num(r?.count), price: num(r?.price) };
-    };
-
-    const messaging = pick(PARENT_MESSAGING);
-    const whatsapp = pick(PARENT_WHATSAPP);
-
-    // Categorías de WhatsApp fuera de la taxonomía conocida y con costo real.
-    // Se suman al total y se muestran aparte, nunca se descartan.
-    const otros = raw
-      .filter((r) => r.category.includes('whatsapp') && !isKnownWhatsappCategory(r.category))
-      .map((r) => ({ category: r.category, count: num(r.count), price: num(r.price) }))
-      .filter((r) => r.price > 0);
-
-    const otrosTotal = otros.reduce((sum, r) => sum + r.price, 0);
-    const totalCost = messaging.price + whatsapp.price + otrosTotal;
-
-    // Se divide por el count de `channels-messaging` porque es el único que cuenta
-    // MENSAJES; `channels-whatsapp` cuenta conversaciones, que es otra unidad.
-    const costPerMessage = messaging.count > 0 ? totalCost / messaging.count : 0;
-
-    // Twilio expone `totalprice`: el total de TODA la cuenta ya calculado por
-    // ellos (SMS, números, A2P, Polly, etc., no sólo WhatsApp) — no hay que
-    // reconstruir su jerarquía padre/hijo a mano como con WhatsApp arriba.
-    // Verificado contra la cuenta real: respeta StartDate/EndDate igual que el
-    // resto de las categorías, y es aditivo entre rangos consecutivos.
-    const totalAccountCost = num(byCategory.get('totalprice')?.price);
-    // Puede dar un residuo negativo minúsculo por redondeo de Twilio; se recorta a 0.
-    const otherServicesCost = Math.max(0, totalAccountCost - totalCost);
-
-    return Response.json({
-      startDate,
-      endDate,
-      totalCost,
-      costPerMessage,
-      totalAccountCost,
-      otherServicesCost,
-      platform: {
-        ...messaging,
-        outbound: pick('channels-messaging-outbound'),
-        inbound: pick('channels-messaging-inbound'),
-      },
-      conversations: {
-        ...whatsapp,
-        templates: raw
-          .filter((r) => r.category.startsWith('channels-whatsapp-template-'))
-          .map((r) => ({
-            category: r.category,
-            label: r.category.replace('channels-whatsapp-template-', ''),
-            count: num(r.count),
-            price: num(r.price),
-          }))
-          .sort((a, b) => b.price - a.price),
-      },
-      otros,
-    });
+    return Response.json({ startDate, endDate, ...aggregateTwilioUsage(raw) });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Error desconocido';
     // "fetch failed" a secas no sirve para diagnosticar: la causa está en err.cause.
