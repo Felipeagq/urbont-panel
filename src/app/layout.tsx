@@ -7,7 +7,9 @@ export const metadata: Metadata = {
   description: 'Command Center de Urbont — gestión de conductores, viajes, ingresos y soporte.',
   robots: 'index, follow',
   icons: {
-    icon: '/favicon.svg',
+    // favicon.svg era un placeholder genérico (cuadrado naranja liso, sin
+    // relación con la marca ni con el azul que usa el resto del panel).
+    icon: '/urbont-logo.png',
   },
   openGraph: {
     title: 'Urbont Panel',

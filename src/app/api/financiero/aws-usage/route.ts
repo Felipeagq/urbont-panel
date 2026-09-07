@@ -114,8 +114,9 @@ export async function GET(req: NextRequest) {
   const accessKeyId = process.env.FOMO_AWS_COST_EXPLORER_KEY_ID;
   const secretAccessKey = process.env.FOMO_AWS_COST_EXPLORER_ACCESS_KEY;
 
-  // Nunca dejar que un undefined llegue al constructor del SDK: reportar acá,
-  // con nombre y apellido, cuál variable falta — no un 500 genérico ni un crash.
+  // Nunca dejar que un undefined llegue al constructor del SDK. El nombre de la
+  // variable faltante sólo va al log del servidor — a la UI no, para no exponer
+  // nombres de variables internas a quien mire el reporte.
   // El `if` (y no un array de booleans) es a propósito: es lo único que hace que
   // TS angoste accessKeyId/secretAccessKey a `string` en el resto de la función.
   if (!accessKeyId || !secretAccessKey) {
@@ -123,10 +124,8 @@ export async function GET(req: NextRequest) {
       !accessKeyId && 'FOMO_AWS_COST_EXPLORER_KEY_ID',
       !secretAccessKey && 'FOMO_AWS_COST_EXPLORER_ACCESS_KEY',
     ].filter(Boolean);
-    return Response.json(
-      { error: `Variables de entorno no configuradas: ${faltantes.join(', ')}` },
-      { status: 500 },
-    );
+    console.error('[financiero/aws-usage] variables de entorno no configuradas:', faltantes.join(', '));
+    return Response.json({ error: 'Variables de entorno no configuradas' }, { status: 500 });
   }
 
   // Servir de caché antes de gastar: cada miss son USD 0.02.

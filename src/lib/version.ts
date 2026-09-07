@@ -6,4 +6,4 @@
  * sólo cambia cuando alguien decide que cambió — subirla es parte del PR
  * que lo amerite, no un efecto secundario.
  */
-export const APP_VERSION = 'v1.0.0';
+export const APP_VERSION = 'v1.0.1';

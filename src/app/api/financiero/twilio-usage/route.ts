@@ -62,17 +62,16 @@ export async function GET(req: NextRequest) {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
 
-  // Nunca dejar que un undefined llegue al Buffer.from de abajo: reportar acá,
-  // con nombre y apellido, cuál variable falta — no un 500 genérico ni un crash.
+  // Nunca dejar que un undefined llegue al Buffer.from de abajo. El nombre de la
+  // variable faltante sólo va al log del servidor — a la UI no, para no exponer
+  // nombres de variables internas a quien mire el reporte.
   if (!accountSid || !authToken) {
     const faltantes = [
       !accountSid && 'TWILIO_ACCOUNT_SID',
       !authToken && 'TWILIO_AUTH_TOKEN',
     ].filter(Boolean);
-    return Response.json(
-      { error: `Variables de entorno no configuradas: ${faltantes.join(', ')}` },
-      { status: 500 },
-    );
+    console.error('[financiero/twilio-usage] variables de entorno no configuradas:', faltantes.join(', '));
+    return Response.json({ error: 'Variables de entorno no configuradas' }, { status: 500 });
   }
 
   try {
@@ -119,11 +118,22 @@ export async function GET(req: NextRequest) {
     // MENSAJES; `channels-whatsapp` cuenta conversaciones, que es otra unidad.
     const costPerMessage = messaging.count > 0 ? totalCost / messaging.count : 0;
 
+    // Twilio expone `totalprice`: el total de TODA la cuenta ya calculado por
+    // ellos (SMS, números, A2P, Polly, etc., no sólo WhatsApp) — no hay que
+    // reconstruir su jerarquía padre/hijo a mano como con WhatsApp arriba.
+    // Verificado contra la cuenta real: respeta StartDate/EndDate igual que el
+    // resto de las categorías, y es aditivo entre rangos consecutivos.
+    const totalAccountCost = num(byCategory.get('totalprice')?.price);
+    // Puede dar un residuo negativo minúsculo por redondeo de Twilio; se recorta a 0.
+    const otherServicesCost = Math.max(0, totalAccountCost - totalCost);
+
     return Response.json({
       startDate,
       endDate,
       totalCost,
       costPerMessage,
+      totalAccountCost,
+      otherServicesCost,
       platform: {
         ...messaging,
         outbound: pick('channels-messaging-outbound'),

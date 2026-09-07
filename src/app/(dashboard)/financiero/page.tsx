@@ -17,11 +17,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 interface TwilioBreakdownRow { category: string; count: number; price: number }
 
 interface TwilioData {
-  totalCost: number;
+  totalCost: number; // sólo WhatsApp (plataforma + conversaciones)
   costPerMessage: number;
   platform: TwilioBreakdownRow & { outbound: TwilioBreakdownRow; inbound: TwilioBreakdownRow };
   conversations: TwilioBreakdownRow & { templates: (TwilioBreakdownRow & { label: string })[] };
   otros: TwilioBreakdownRow[];
+  totalAccountCost: number; // toda la cuenta Twilio: WhatsApp + SMS + números + A2P + etc.
+  otherServicesCost: number; // totalAccountCost - totalCost
 }
 
 interface AwsData {
@@ -187,8 +189,11 @@ export default function FinancieroPage() {
     );
   }
 
-  const combined = twilio ? twilio.totalCost + (awsFresh?.totalCost ?? 0) : null;
-  const twilioShare = combined && combined > 0 ? ((twilio!.totalCost / combined) * 100) : 0;
+  // Resumen compara infraestructura completa, no sólo WhatsApp: usar totalCost acá
+  // mostraría "$0" con la cuenta gastando de verdad en SMS/números/A2P, como si
+  // Twilio no costara nada.
+  const combined = twilio ? twilio.totalAccountCost + (awsFresh?.totalCost ?? 0) : null;
+  const twilioShare = combined && combined > 0 ? ((twilio!.totalAccountCost / combined) * 100) : 0;
 
   return (
     <div className="space-y-4">
@@ -260,7 +265,7 @@ export default function FinancieroPage() {
         <div className="flex gap-6">
           {([
             { id: 'summary', label: 'Resumen', icon: BarChart3 },
-            { id: 'twilio', label: 'Twilio (WhatsApp)', icon: MessageCircle },
+            { id: 'twilio', label: 'Twilio', icon: MessageCircle },
             { id: 'aws', label: 'AWS', icon: Cloud },
           ] as const).map(({ id, label, icon: Icon }) => (
             <button
@@ -285,8 +290,12 @@ export default function FinancieroPage() {
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Metric
-                label="Twilio (WhatsApp)" value={usd(twilio.totalCost)} accent="var(--brand)"
-                hint={<span className="text-[11.5px] text-gray-400">{int(twilio.platform.count)} mensajes</span>}
+                label="Twilio" value={usd(twilio.totalAccountCost)} accent="var(--brand)"
+                hint={
+                  <span className="text-[11.5px] text-gray-400">
+                    {twilio.totalCost > 0 ? `${usd(twilio.totalCost)} en WhatsApp` : 'sin gasto de WhatsApp'}
+                  </span>
+                }
               />
               <Metric
                 label="AWS"
@@ -342,16 +351,44 @@ export default function FinancieroPage() {
       {tab === 'twilio' && (
         loadingTwilio ? <MetricSkeleton /> : twilio && (
           <div className="space-y-4">
+            {/* Cuenta completa primero: WhatsApp es una parte, no el todo. */}
+            <div className="stat-card">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <div>
+                  <p className="text-[12px] font-medium text-gray-500">Total cuenta Twilio (todos los servicios)</p>
+                  <p className="text-[26px] font-semibold tracking-tight tabular-nums text-gray-900 mt-1">
+                    {usd(twilio.totalAccountCost)}
+                  </p>
+                </div>
+                <p className="text-[11.5px] text-gray-400 max-w-[240px] text-right">
+                  Total que reporta Twilio directamente (categoría <code className="text-gray-500">totalprice</code>);
+                  no se reconstruye a mano.
+                </p>
+              </div>
+              <div className="mt-3 flex h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                <div
+                  className="bg-(--brand)"
+                  style={{ width: `${twilio.totalAccountCost > 0 ? (twilio.totalCost / twilio.totalAccountCost) * 100 : 0}%` }}
+                />
+                <div className="bg-gray-400" style={{ width: `${twilio.totalAccountCost > 0 ? (twilio.otherServicesCost / twilio.totalAccountCost) * 100 : 0}%` }} />
+              </div>
+              <div className="mt-2 flex justify-between text-[12px] text-gray-600">
+                <span><span className="inline-block w-2 h-2 rounded-full bg-(--brand) mr-1.5" />WhatsApp {usd(twilio.totalCost)}</span>
+                <span><span className="inline-block w-2 h-2 rounded-full bg-gray-400 mr-1.5" />Otros servicios {usd(twilio.otherServicesCost)}</span>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <Metric label="Total Twilio" value={usd(twilio.totalCost)} accent="var(--brand)" />
+              <Metric label="Total WhatsApp" value={usd(twilio.totalCost)} accent="var(--brand)" />
               <Metric label="Mensajes" value={int(twilio.platform.count)} accent="var(--brand)" />
               <Metric
                 label="Costo por mensaje" value={usd(twilio.costPerMessage, 4)} accent="var(--brand)"
-                hint={<span className="text-[11.5px] text-gray-400">total ÷ mensajes de plataforma</span>}
+                hint={<span className="text-[11.5px] text-gray-400">total WhatsApp ÷ mensajes de plataforma</span>}
               />
             </div>
 
             <div className="stat-card overflow-x-auto">
+              <h3 className="text-[13px] font-semibold text-gray-700 mb-3">Desglose de WhatsApp</h3>
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="text-left text-gray-500 border-b border-gray-100">
@@ -372,18 +409,32 @@ export default function FinancieroPage() {
                     <Row key={o.category} label={`${o.category} (sin clasificar)`} count={o.count} price={o.price} />
                   ))}
                   <tr className="font-semibold text-gray-900">
-                    <td className="py-2.5">Total</td>
+                    <td className="py-2.5">Total WhatsApp</td>
                     <td />
                     <td className="py-2.5 text-right">{usd(twilio.totalCost)}</td>
+                  </tr>
+                  {twilio.otherServicesCost > 0 && (
+                    <tr className="text-gray-500">
+                      <td className="py-2">Otros servicios Twilio (SMS, números, A2P, etc.)</td>
+                      <td />
+                      <td className="py-2 text-right">{usd(twilio.otherServicesCost)}</td>
+                    </tr>
+                  )}
+                  <tr className="font-semibold text-gray-900 border-t border-gray-200">
+                    <td className="py-2.5">Total cuenta Twilio</td>
+                    <td />
+                    <td className="py-2.5 text-right">{usd(twilio.totalAccountCost)}</td>
                   </tr>
                 </tbody>
               </table>
             </div>
 
             <p className="text-[12px] text-gray-500 leading-relaxed">
-              Twilio factura en dos capas independientes —plataforma y conversaciones— y cada una ya
-              incluye sus sub-categorías. El total suma sólo las dos capas padre; las filas indentadas
-              son desglose y no se vuelven a sumar.
+              Twilio factura WhatsApp en dos capas independientes —plataforma y conversaciones— y cada
+              una ya incluye sus sub-categorías; el total WhatsApp suma sólo las dos capas padre, las
+              filas indentadas son desglose y no se vuelven a sumar. El total de la cuenta, en cambio,
+              es el que Twilio calcula directamente (no se reconstruye) y cubre todos sus productos:
+              SMS, números, registro A2P, Amazon Polly, etc.
             </p>
           </div>
         )
