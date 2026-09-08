@@ -7,7 +7,7 @@ import { formatDate, formatRelativeTime } from '@/lib/utils';
 import {
   Shield, RefreshCw, Search, UserPlus, X, Loader2,
   AlertTriangle, Lock, Unlock, Mail, Clock, ChevronDown,
-  KeyRound, Eye, EyeOff
+  KeyRound, Eye, EyeOff, User, Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -98,6 +98,7 @@ export default function AdminUsers() {
   const [search, setSearch] = useState('');
   const [showInvite, setShowInvite] = useState(false);
   const [inviteForm, setInviteForm] = useState<InviteForm>({ name: '', email: '', role: 'support', password: '' });
+  const [invitePwdVisible, setInvitePwdVisible] = useState(false);
   const [inviteLoading, setInviteLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<string | null>(null);
@@ -107,6 +108,8 @@ export default function AdminUsers() {
   const [pwdConfirm, setPwdConfirm] = useState('');
   const [pwdVisible, setPwdVisible] = useState(false);
   const [pwdLoading, setPwdLoading] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const loadData = useCallback(() => {
     setLoading(true);
@@ -119,8 +122,17 @@ export default function AdminUsers() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  const closeInviteModal = useCallback(() => {
+    setShowInvite(false);
+    setInviteForm({ name: '', email: '', role: 'support', password: '' });
+    setInvitePwdVisible(false);
+  }, []);
+
+  const inviteEmailValid = /\S+@\S+\.\S+/.test(inviteForm.email);
+  const inviteValid = !!inviteForm.name.trim() && inviteEmailValid && inviteForm.password.length >= MIN_PASSWORD_LENGTH;
+
   const handleInvite = async () => {
-    if (!inviteForm.name.trim() || !inviteForm.email.trim() || !inviteForm.role || inviteForm.password.length < 8) return;
+    if (!inviteValid) return;
     setInviteLoading(true);
     try {
       await adminFetch('/auth/users', {
@@ -128,8 +140,7 @@ export default function AdminUsers() {
         body: JSON.stringify(inviteForm),
       });
       toast.success(`Invitación enviada a ${inviteForm.email}`);
-      setShowInvite(false);
-      setInviteForm({ name: '', email: '', role: 'support', password: '' });
+      closeInviteModal();
       loadData();
     } catch (err: any) {
       toast.error(err.message || 'Error al enviar la invitación');
@@ -137,6 +148,16 @@ export default function AdminUsers() {
       setInviteLoading(false);
     }
   };
+
+  // Cerrar con Escape, igual que el modal de contraseña.
+  useEffect(() => {
+    if (!showInvite) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !inviteLoading) closeInviteModal();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showInvite, inviteLoading, closeInviteModal]);
 
   const handleToggleActive = async (user: AdminUser) => {
     setActionLoading(`toggle-${user.id}`);
@@ -171,6 +192,31 @@ export default function AdminUsers() {
       setActionLoading(null);
     }
   };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    try {
+      await adminFetch(`/auth/users/${deleteTarget.id}`, { method: 'DELETE' });
+      toast.success(`${deleteTarget.name} fue eliminado del panel`);
+      setDeleteTarget(null);
+      loadData();
+    } catch (err: any) {
+      toast.error(err.message || 'Error al eliminar el usuario');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  // Cerrar con Escape, igual que los demás modales.
+  useEffect(() => {
+    if (!deleteTarget) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !deleteLoading) setDeleteTarget(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [deleteTarget, deleteLoading]);
 
   const closePasswordModal = useCallback(() => {
     setPwdTarget(null);
@@ -266,75 +312,6 @@ export default function AdminUsers() {
           className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand)"
         />
       </div>
-
-      {/* Invite form panel */}
-      {showInvite && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-gray-900">Invitar nuevo usuario al panel</h2>
-            <button onClick={() => setShowInvite(false)} className="p-1 rounded text-gray-400 hover:text-gray-600">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="grid grid-cols-4 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Nombre completo</label>
-              <input
-                type="text"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand) bg-white"
-                placeholder="Juan Pérez"
-                value={inviteForm.name}
-                onChange={e => setInviteForm(f => ({ ...f, name: e.target.value }))}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Email</label>
-              <input
-                type="email"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand) bg-white"
-                placeholder="juan@urbont.com"
-                value={inviteForm.email}
-                onChange={e => setInviteForm(f => ({ ...f, email: e.target.value }))}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Rol</label>
-              <select
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--brand)/30 bg-white"
-                value={inviteForm.role}
-                onChange={e => setInviteForm(f => ({ ...f, role: e.target.value }))}
-              >
-                <option value="support">Soporte</option>
-                <option value="operations">Operaciones</option>
-                <option value="analyst">Analista</option>
-                <option value="developer">Developer</option>
-                <option value="owner">Owner</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Contraseña temporal</label>
-              <input
-                type="text"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand) bg-white"
-                placeholder="Mín. 8 caracteres"
-                value={inviteForm.password}
-                onChange={e => setInviteForm(f => ({ ...f, password: e.target.value }))}
-              />
-            </div>
-          </div>
-          <div className="mt-3 flex gap-2">
-            <button
-              onClick={handleInvite}
-              disabled={!inviteForm.name.trim() || !inviteForm.email.trim() || inviteForm.password.length < 8 || inviteLoading}
-              className="btn-primary text-xs flex items-center gap-1.5 disabled:opacity-50"
-            >
-              {inviteLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
-              Enviar invitación
-            </button>
-            <button onClick={() => setShowInvite(false)} className="btn-outline text-xs">Cancelar</button>
-          </div>
-        </div>
-      )}
 
       {/* Users table */}
       {loading ? (
@@ -465,6 +442,17 @@ export default function AdminUsers() {
                           <><Unlock className="w-3.5 h-3.5" /> Activar</>
                         )}
                       </button>
+                      {isOwner && user.id !== currentUser?.id && (
+                        <button
+                          onClick={() => setDeleteTarget(user)}
+                          disabled={!!actionLoading}
+                          title={`Eliminar a ${user.name}`}
+                          aria-label={`Eliminar a ${user.name}`}
+                          className="flex items-center justify-center p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors disabled:opacity-50"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -565,6 +553,186 @@ export default function AdminUsers() {
                 Cambiar contraseña
               </button>
               <button onClick={closePasswordModal} disabled={pwdLoading} className="btn-outline text-xs disabled:opacity-50">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Invite user modal */}
+      {showInvite && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-[2px] p-4"
+          onClick={() => { if (!inviteLoading) closeInviteModal(); }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Invitar nuevo usuario al panel"
+            className="bg-white rounded-xl border border-gray-100 shadow-xl w-full max-w-md p-5"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-(--brand-pale) text-(--brand) flex-shrink-0">
+                  <UserPlus className="w-4.5 h-4.5" />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-sm font-semibold text-gray-900">Invitar nuevo usuario</h2>
+                  <p className="text-xs text-gray-400">Se le dará acceso al panel administrativo</p>
+                </div>
+              </div>
+              <button
+                onClick={closeInviteModal}
+                disabled={inviteLoading}
+                className="p-1 rounded text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                aria-label="Cerrar"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Nombre completo</label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-300" />
+                  <input
+                    type="text"
+                    autoFocus
+                    className="w-full border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand) bg-white"
+                    placeholder="Juan Pérez"
+                    value={inviteForm.name}
+                    onChange={e => setInviteForm(f => ({ ...f, name: e.target.value }))}
+                    onKeyDown={e => { if (e.key === 'Enter' && inviteValid && !inviteLoading) handleInvite(); }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Email</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-300" />
+                  <input
+                    type="email"
+                    className="w-full border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand) bg-white"
+                    placeholder="juan@urbont.com"
+                    value={inviteForm.email}
+                    onChange={e => setInviteForm(f => ({ ...f, email: e.target.value }))}
+                    onKeyDown={e => { if (e.key === 'Enter' && inviteValid && !inviteLoading) handleInvite(); }}
+                  />
+                </div>
+                {inviteForm.email.length > 0 && !inviteEmailValid && (
+                  <p className="text-[11px] text-red-600 mt-1">Ingresa un email válido.</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Rol</label>
+                <select
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand) bg-white"
+                  value={inviteForm.role}
+                  onChange={e => setInviteForm(f => ({ ...f, role: e.target.value }))}
+                >
+                  {Object.entries(ROLE_CONFIG).map(([r, cfg]) => (
+                    <option key={r} value={r}>{cfg.label}</option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-gray-400 mt-1">{ROLE_CONFIG[inviteForm.role]?.desc}</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Contraseña temporal</label>
+                <div className="relative">
+                  <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-300" />
+                  <input
+                    type={invitePwdVisible ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    className="w-full border border-gray-200 rounded-lg pl-9 pr-9 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand) bg-white"
+                    placeholder={`Mín. ${MIN_PASSWORD_LENGTH} caracteres`}
+                    value={inviteForm.password}
+                    onChange={e => setInviteForm(f => ({ ...f, password: e.target.value }))}
+                    onKeyDown={e => { if (e.key === 'Enter' && inviteValid && !inviteLoading) handleInvite(); }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setInvitePwdVisible(v => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+                    aria-label={invitePwdVisible ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  >
+                    {invitePwdVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                {inviteForm.password.length > 0 && inviteForm.password.length < MIN_PASSWORD_LENGTH && (
+                  <p className="text-[11px] text-red-600 mt-1">La contraseña debe tener al menos {MIN_PASSWORD_LENGTH} caracteres.</p>
+                )}
+              </div>
+
+              <p className="text-[11px] text-gray-400 leading-snug">
+                Comunica esta contraseña al usuario por un canal seguro; podrá cambiarla luego de iniciar sesión.
+              </p>
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={handleInvite}
+                disabled={!inviteValid || inviteLoading}
+                className="btn-primary text-xs flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {inviteLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
+                Enviar invitación
+              </button>
+              <button onClick={closeInviteModal} disabled={inviteLoading} className="btn-outline text-xs disabled:opacity-50">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete user confirmation modal */}
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-[2px] p-4"
+          onClick={() => { if (!deleteLoading) setDeleteTarget(null); }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Eliminar a ${deleteTarget.name}`}
+            className="bg-white rounded-xl border border-gray-100 shadow-xl w-full max-w-sm p-5"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-red-50 text-red-600 flex-shrink-0">
+                <AlertTriangle className="w-4.5 h-4.5" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-gray-900">Eliminar usuario</h2>
+                <p className="text-xs text-gray-400 mt-0.5">Esta acción no se puede deshacer.</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-gray-600 leading-snug">
+              Vas a eliminar a <span className="font-semibold text-gray-900">{deleteTarget.name}</span> ({deleteTarget.email}) del panel.
+              Perderá acceso de inmediato.
+            </p>
+
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={handleDelete}
+                disabled={deleteLoading}
+                className="flex-1 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-medium disabled:opacity-50 flex items-center justify-center gap-1.5 transition-colors"
+              >
+                {deleteLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                Sí, eliminar
+              </button>
+              <button
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleteLoading}
+                className="flex-1 btn-outline text-xs disabled:opacity-50"
+              >
                 Cancelar
               </button>
             </div>

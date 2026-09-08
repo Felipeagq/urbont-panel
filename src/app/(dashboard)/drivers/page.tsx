@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { adminFetch } from '@/lib/api';
-import { formatDate } from '@/lib/utils';
+import { formatDate, actionTookEffect } from '@/lib/utils';
 import {
   Search, Car, Star, Shield, CheckCircle2,
   Phone, ChevronDown, ChevronUp, RefreshCw, UserX, AlertTriangle, Hash, ExternalLink
@@ -129,14 +129,44 @@ export default function Drivers() {
   const [suspendTarget, setSuspendTarget] = useState<string | null>(null);
   const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
 
-  const loadData = useCallback(() => {
-    adminFetch('/drivers')
-      .then(data => setDrivers(data.drivers ?? []))
-      .catch(e => setError(e.message))
+  // Devuelve la lista recién cargada para que quien la llame (p. ej. doAction)
+  // pueda comprobar si una acción realmente tuvo efecto, sin depender del
+  // timing de setState.
+  const loadData = useCallback((): Promise<Driver[]> => {
+    setLoading(true);
+    return adminFetch('/drivers')
+      .then(data => {
+        const list: Driver[] = data.drivers ?? [];
+        setDrivers(list);
+        return list;
+      })
+      .catch(e => {
+        setError(e.message);
+        return [] as Driver[];
+      })
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Mantiene el drawer sincronizado con la lista recargada: si el conductor
+  // seleccionado cambió de estado (o fue eliminado) en un refresh disparado
+  // desde el drawer mismo, el prop `driver` debe reflejarlo de inmediato.
+  useEffect(() => {
+    setSelectedDriver(prev => {
+      if (!prev) return prev;
+      return drivers.find(d => d.id === prev.id) ?? prev;
+    });
+  }, [drivers]);
+
+  // Suspender/reactivar responde success:true incluso si el UPDATE no tocó
+  // ninguna fila (id inexistente o rol distinto de chauffeur/driver). Por
+  // eso no confiamos en la respuesta: recargamos y comprobamos que el
+  // estado realmente cambió antes de avisar éxito.
+  const EXPECTED_STATUS: Record<string, Driver['status']> = {
+    suspend: 'suspended',
+    reactivate: 'active',
+  };
 
   const doAction = async (id: string, action: string, body?: object) => {
     setActionLoading(`${id}-${action}`);
@@ -145,13 +175,23 @@ export default function Drivers() {
         method: 'POST',
         body: body ? JSON.stringify(body) : undefined,
       });
-      toast.success(
-        action === 'suspend' ? 'Conductor suspendido' :
-        action === 'reactivate' ? 'Conductor reactivado' : 'Conductor verificado'
-      );
       setSuspendTarget(null);
       setSuspendReason('');
-      loadData();
+
+      const freshList = await loadData();
+      const expected = EXPECTED_STATUS[action];
+      if (expected) {
+        const { found, changed } = actionTookEffect(freshList, id, 'status', expected);
+        if (!found) {
+          toast.warning('El servidor respondió éxito, pero ese conductor ya no aparece en la lista. Verifica el ID.');
+        } else if (!changed) {
+          toast.warning('El servidor respondió éxito, pero el estado no cambió. Puede que el ID no exista o el rol no coincida.');
+        } else {
+          toast.success(action === 'suspend' ? 'Conductor suspendido' : 'Conductor reactivado');
+        }
+      } else {
+        toast.success('Conductor verificado');
+      }
     } catch (err: any) {
       toast.error(err.message || 'Error al realizar la acción');
     } finally {
@@ -405,7 +445,7 @@ export default function Drivers() {
                           >
                             <ExternalLink className="w-3.5 h-3.5" /> Perfil completo
                           </button>
-                          {driver.status === 'active' && suspendTarget !== driver.id && (
+                          {driver.status !== 'suspended' && suspendTarget !== driver.id && (
                             <button
                               onClick={() => setSuspendTarget(driver.id)}
                               className="flex items-center gap-1.5 px-3 py-1.5 border border-red-200 text-red-600 bg-white hover:bg-red-50 rounded-lg text-xs font-medium transition-colors"

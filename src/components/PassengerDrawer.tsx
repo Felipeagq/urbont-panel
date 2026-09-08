@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { adminFetch } from '@/lib/api';
-import { formatDate, formatRelativeTime } from '@/lib/utils';
+import { formatDate, formatRelativeTime, actionTookEffect } from '@/lib/utils';
 import {
   X, Phone, Mail, Star, MapPin, Calendar, AlertTriangle,
   UserX, UserCheck, Ban, MessageSquare, Loader2, ShieldAlert,
@@ -38,7 +38,10 @@ interface Trip {
 interface PassengerDrawerProps {
   passenger: Passenger | null;
   onClose: () => void;
-  onRefresh: () => void;
+  // Debe devolver la lista recién recargada: suspender/reactivar responde
+  // success:true aunque el UPDATE no afecte filas, así que la única forma
+  // de confirmar la acción es comprobar el estado tras un refetch real.
+  onRefresh: () => Promise<Passenger[] | void>;
 }
 
 const AVATAR_PALETTE = [
@@ -94,6 +97,15 @@ export default function PassengerDrawer({ passenger, onClose, onRefresh }: Passe
     }
   }, [tab, passenger?.id]);
 
+  // Suspender/reactivar responde success:true incluso si el UPDATE no tocó
+  // ninguna fila (id inexistente o rol distinto de 'passenger'). No
+  // confiamos en la respuesta: recargamos y comprobamos que el estado
+  // realmente cambió antes de avisar éxito.
+  const EXPECTED_STATUS: Record<string, Passenger['status']> = {
+    suspend: 'suspended',
+    reactivate: 'active',
+  };
+
   const doAction = async (action: string, body?: object) => {
     if (!passenger) return;
     setActionLoading(action);
@@ -102,18 +114,30 @@ export default function PassengerDrawer({ passenger, onClose, onRefresh }: Passe
         method: 'POST',
         body: body ? JSON.stringify(body) : undefined,
       });
-      const msgs: Record<string, string> = {
-        suspend: 'Pasajero suspendido',
-        reactivate: 'Pasajero reactivado',
-        ban: 'Pasajero baneado permanentemente',
-        note: 'Nota añadida',
-      };
-      toast.success(msgs[action] ?? 'Acción completada');
       setShowSuspendForm(false);
       setShowNoteForm(false);
       setSuspendReason('');
       setNoteText('');
-      onRefresh();
+
+      const expected = EXPECTED_STATUS[action];
+      if (expected) {
+        const freshList = (await onRefresh()) ?? [];
+        const { found, changed } = actionTookEffect(freshList, passenger.id, 'status', expected);
+        if (!found) {
+          toast.warning('El servidor respondió éxito, pero este pasajero ya no aparece en la lista. Verifica el ID.');
+        } else if (!changed) {
+          toast.warning('El servidor respondió éxito, pero el estado no cambió. Puede que el ID no exista o el rol no coincida.');
+        } else {
+          toast.success(action === 'suspend' ? 'Pasajero suspendido' : 'Pasajero reactivado');
+        }
+      } else {
+        const msgs: Record<string, string> = {
+          ban: 'Pasajero baneado permanentemente',
+          note: 'Nota añadida',
+        };
+        toast.success(msgs[action] ?? 'Acción completada');
+        onRefresh();
+      }
     } catch (err: any) {
       toast.error(err.message || 'Error al realizar la acción');
     } finally {

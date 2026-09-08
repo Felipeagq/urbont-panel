@@ -57,15 +57,34 @@ export default function Passengers() {
   const [statusFilter, setStatusFilter] = useState<'all' | Passenger['status']>('all');
   const [selected, setSelected] = useState<Passenger | null>(null);
 
-  const loadData = useCallback(() => {
+  // Devuelve la lista recién cargada para que PassengerDrawer pueda
+  // comprobar si suspender/reactivar realmente tuvo efecto, en lugar de
+  // confiar en el success:true de la respuesta.
+  const loadData = useCallback((): Promise<Passenger[]> => {
     setLoading(true);
-    adminFetch('/passengers')
-      .then(data => setPassengers(data.passengers ?? []))
-      .catch(e => setError(e.message))
+    return adminFetch('/passengers')
+      .then(data => {
+        const list: Passenger[] = data.passengers ?? [];
+        setPassengers(list);
+        return list;
+      })
+      .catch(e => {
+        setError(e.message);
+        return [] as Passenger[];
+      })
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Mantiene el drawer sincronizado si el pasajero seleccionado cambió de
+  // estado en un refresh disparado desde el drawer mismo.
+  useEffect(() => {
+    setSelected(prev => {
+      if (!prev) return prev;
+      return passengers.find(p => p.id === prev.id) ?? prev;
+    });
+  }, [passengers]);
 
   const filtered = passengers.filter(p => {
     const q = search.toLowerCase();

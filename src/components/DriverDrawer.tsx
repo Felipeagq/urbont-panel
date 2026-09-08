@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { adminFetch } from '@/lib/api';
-import { formatDate, formatRelativeTime } from '@/lib/utils';
+import { formatDate, formatRelativeTime, actionTookEffect } from '@/lib/utils';
 import {
   X, Phone, Mail, Star, MapPin, Calendar, Car, Shield, ShieldCheck,
   UserX, UserCheck, Ban, MessageSquare, Loader2, ChevronRight,
@@ -102,7 +102,10 @@ interface DriverTrip {
 interface DriverDrawerProps {
   driver: Driver | null;
   onClose: () => void;
-  onRefresh: () => void;
+  // Debe devolver la lista recién recargada: suspender/reactivar responde
+  // success:true aunque el UPDATE no afecte filas, así que la única forma
+  // de confirmar la acción es comprobar el estado tras un refetch real.
+  onRefresh: () => Promise<Driver[] | void>;
 }
 
 const AVATAR_PALETTE = [
@@ -152,6 +155,15 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
   }, [driver?.id]);
 
 
+  // Suspender/reactivar responde success:true incluso si el UPDATE no tocó
+  // ninguna fila (id inexistente o rol distinto de chauffeur/driver). No
+  // confiamos en la respuesta: recargamos y comprobamos que el estado
+  // realmente cambió antes de avisar éxito.
+  const EXPECTED_STATUS: Record<string, Driver['status']> = {
+    suspend: 'suspended',
+    reactivate: 'active',
+  };
+
   const doAction = async (action: string, body?: object) => {
     if (!driver) return;
     setActionLoading(action);
@@ -160,18 +172,30 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
         method: 'POST',
         body: body ? JSON.stringify(body) : undefined,
       });
-      const msgs: Record<string, string> = {
-        suspend: 'Conductor suspendido',
-        reactivate: 'Conductor reactivado',
-        verify: 'Conductor verificado',
-        ban: 'Conductor baneado',
-        note: 'Nota guardada',
-      };
-      toast.success(msgs[action] ?? 'Acción completada');
       setShowSuspendForm(false);
       setSuspendReason('');
       setNoteText('');
-      onRefresh();
+
+      const expected = EXPECTED_STATUS[action];
+      if (expected) {
+        const freshList = (await onRefresh()) ?? [];
+        const { found, changed } = actionTookEffect(freshList, driver.id, 'status', expected);
+        if (!found) {
+          toast.warning('El servidor respondió éxito, pero este conductor ya no aparece en la lista. Verifica el ID.');
+        } else if (!changed) {
+          toast.warning('El servidor respondió éxito, pero el estado no cambió. Puede que el ID no exista o el rol no coincida.');
+        } else {
+          toast.success(action === 'suspend' ? 'Conductor suspendido' : 'Conductor reactivado');
+        }
+      } else {
+        const msgs: Record<string, string> = {
+          verify: 'Conductor verificado',
+          ban: 'Conductor baneado',
+          note: 'Nota guardada',
+        };
+        toast.success(msgs[action] ?? 'Acción completada');
+        onRefresh();
+      }
     } catch (err: any) {
       toast.error(err.message || 'Error al realizar la acción');
     } finally {
@@ -527,7 +551,7 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
         {/* Footer actions */}
         <div className="border-t border-gray-100 p-4 flex-shrink-0">
           <div className="flex gap-2 flex-wrap">
-            {driver.status === 'active' && (
+            {driver.status !== 'suspended' && driver.status !== 'banned' && (
               <button
                 onClick={() => setShowSuspendForm(true)}
                 className="flex items-center gap-1.5 px-3 py-2 border border-red-200 text-red-600 bg-white hover:bg-red-50 rounded-lg text-xs font-medium transition-colors"

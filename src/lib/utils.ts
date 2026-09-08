@@ -27,3 +27,24 @@ export function formatRelativeTime(dateStr: string | undefined | null): string {
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
 }
+
+/**
+ * Los endpoints de suspender/reactivar (conductores y pasajeros) responden
+ * `success: true` aun cuando el UPDATE afecta cero filas — id inexistente o
+ * rol que no coincide con el filtro del backend. El panel no puede confiar
+ * en el `success` de la respuesta; tiene que recargar el registro y
+ * comprobar que el campo realmente cambió al valor esperado.
+ *
+ * `freshList` debe venir de un refetch posterior a la acción, no de la lista
+ * que ya tenías en memoria.
+ */
+export function actionTookEffect<T extends { id: string }, K extends keyof T>(
+  freshList: T[],
+  id: string,
+  field: K,
+  expectedValue: T[K],
+): { found: boolean; changed: boolean } {
+  const fresh = freshList.find(item => item.id === id);
+  if (!fresh) return { found: false, changed: false };
+  return { found: true, changed: fresh[field] === expectedValue };
+}
