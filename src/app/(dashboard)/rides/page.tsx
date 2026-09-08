@@ -21,8 +21,8 @@ interface Ride {
   pickupAddress: string;
   dropoffAddress: string;
   fare: number;
-  distance: number;
-  duration: number;
+  distance: string | number;
+  duration: string | number;
   createdAt: string;
   completedAt?: string;
 }
@@ -260,10 +260,10 @@ export default function Rides() {
                       <p className="text-sm font-bold text-gray-900">{formatCurrency(ride.fare)}</p>
                       <div className="flex items-center gap-2 text-[11px] text-gray-400 mt-0.5">
                         <span className="flex items-center gap-1">
-                          <ArrowRight className="w-3 h-3" />{ride.distance ? `${ride.distance}mi` : '—'}
+                          <ArrowRight className="w-3 h-3" />{ride.distance || '—'}
                         </span>
                         <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />{ride.duration ? `${ride.duration}min` : '—'}
+                          <Clock className="w-3 h-3" />{ride.duration || '—'}
                         </span>
                       </div>
                       <p className="text-[11px] text-gray-300 mt-0.5">{formatDate(ride.createdAt)}</p>

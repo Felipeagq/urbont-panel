@@ -64,22 +64,23 @@ export default function FeedbackPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const avgRating = feedback.length > 0
-    ? feedback.reduce((acc, f) => acc + f.rating, 0) / feedback.length
+  const feedbackWithRating = feedback.filter(f => f.rating != null);
+  const avgRating = feedbackWithRating.length > 0
+    ? feedbackWithRating.reduce((acc, f) => acc + (f.rating as number), 0) / feedbackWithRating.length
     : 0;
 
   const distribution = [5, 4, 3, 2, 1].map(r => ({
     rating: `${r}★`,
     ratingNum: r,
-    count: feedback.filter(f => f.rating === r).length,
-    pct: feedback.length > 0 ? (feedback.filter(f => f.rating === r).length / feedback.length) * 100 : 0,
+    count: feedbackWithRating.filter(f => f.rating === r).length,
+    pct: feedbackWithRating.length > 0 ? (feedbackWithRating.filter(f => f.rating === r).length / feedbackWithRating.length) * 100 : 0,
   }));
 
   // Top rated drivers
   const driverRatings = Object.values(
-    feedback.reduce((acc, f) => {
+    feedbackWithRating.reduce((acc, f) => {
       if (!acc[f.driverId]) acc[f.driverId] = { name: f.driverName, total: 0, count: 0 };
-      acc[f.driverId].total += f.rating;
+      acc[f.driverId].total += (f.rating as number);
       acc[f.driverId].count += 1;
       return acc;
     }, {} as Record<string, { name: string; total: number; count: number }>)

@@ -11,6 +11,18 @@ import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import DriverDrawer from '@/components/DriverDrawer';
 
+interface DriverDocument {
+  id: string;
+  docKey: string;
+  state: 'aprobado' | 'pendiente' | 'rechazado';
+  rawStatus: string;
+  fileName: string;
+  url: string;
+  uploadedAt: string;
+  updatedAt: string;
+  required: boolean;
+}
+
 interface Driver {
   id: string;
   name: string;
@@ -19,12 +31,69 @@ interface Driver {
   status: 'active' | 'suspended' | 'inactive' | 'pending';
   rating: number;
   ridesCompleted: number;
+  ridesCancelled: number;
+  ridesAssigned: number;
+  lastRideAt?: string;
+  lastRide?: string;
+  earnings: number;
+  earningsGross: number;
+  earningsNet: number;
   vehicle: string;
+  vehicleMake: string;
+  vehicleModel: string;
+  vehicleYear: string;
   plate: string;
   vehicleColor: string;
-  verificationStatus: string;
+  vehiclePhotoUrl: string;
+  hasVehicle: boolean;
   createdAt: string;
   suspensionReason?: string;
+
+  // Estado de documentos: el campo que debe usarse en la UI
+  documentsState: 'aprobado' | 'pendiente' | 'rechazado' | 'sin_documentos';
+  documentsApproved: number;
+  documentsPending: number;
+  documentsRejected: number;
+  documentsTotal: number;
+  rejectionReason?: string;
+
+  // Banderas de inconsistencia para auditar
+  verificationMismatch: boolean;
+  approvedWithoutVehicle: boolean;
+  roleMismatch: boolean;
+
+  // Documentos individuales, ya ordenados por tipo
+  documents: DriverDocument[];
+
+  // Viajes del conductor
+  rides?: DriverTrip[];
+
+  // Fuentes conflictivas (conservadas para auditoría, NO para mostrar como verdad)
+  verificationStatus?: string;
+  backgroundCheckStatus?: string;
+}
+
+interface DriverTrip {
+  id: string;
+  date?: string;
+  status: string;
+  passenger?: string;
+  passengerName?: string;
+  origin: string;
+  destination: string;
+  fare: number;
+  totalPrice?: number;
+  tipAmount?: number;
+  distanceMiles?: number;
+  durationMinutes?: number;
+  vehicleType?: string;
+  paymentMethod?: string;
+  paymentStatus?: string;
+  rating?: number;
+  cancelReason?: string;
+  completedAt?: string;
+  cancelledAt?: string;
+  createdAt?: string;
 }
 
 const STATUS_CONFIG = {
@@ -224,7 +293,17 @@ export default function Drivers() {
                           <Star className="w-3.5 h-3.5 text-amber-400" />
                           {(driver.rating || 0).toFixed(1)}
                         </p>
-                        <p className="text-xs text-gray-400">{driver.ridesCompleted} viajes</p>
+                        <p className="text-xs text-gray-400">
+                          {driver.ridesCompleted} viajes ·
+                          <span className={`ml-1 font-medium ${
+                            driver.documentsState === 'aprobado' ? 'text-emerald-600' :
+                            driver.documentsState === 'pendiente' ? 'text-amber-600' :
+                            driver.documentsState === 'rechazado' ? 'text-red-600' :
+                            'text-gray-500'
+                          }`}>
+                            {driver.documentsState}
+                          </span>
+                        </p>
                       </div>
 
                       {/* Status badge */}
@@ -254,7 +333,7 @@ export default function Drivers() {
                           </div>
                           <div className="flex items-center gap-2 text-sm text-gray-600">
                             <Shield className="w-3.5 h-3.5 text-gray-400" />
-                            Verificación: {driver.verificationStatus || '—'}
+                            Documentos: {driver.documentsState || '—'} ({driver.documentsApproved}/{driver.documentsTotal})
                           </div>
                           <div className="flex items-center gap-2 text-sm text-gray-400 text-xs">
                             Registro: {formatDate(driver.createdAt)}
@@ -264,6 +343,31 @@ export default function Drivers() {
                         {driver.suspensionReason && (
                           <div className="mb-4 p-3 bg-red-50 border border-red-100 rounded-lg text-sm text-red-700">
                             <span className="font-medium">Motivo de suspensión:</span> {driver.suspensionReason}
+                          </div>
+                        )}
+
+                        {/* Banderas de inconsistencia */}
+                        {driver.verificationMismatch && (
+                          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+                            <AlertTriangle className="w-4 h-4 inline mr-2" />
+                            El estado de documentos no coincide con verificación
+                          </div>
+                        )}
+                        {driver.approvedWithoutVehicle && (
+                          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                            <AlertTriangle className="w-4 h-4 inline mr-2" />
+                            Aprobado pero sin vehículo registrado
+                          </div>
+                        )}
+                        {driver.roleMismatch && (
+                          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                            <AlertTriangle className="w-4 h-4 inline mr-2" />
+                            Maneja viajes pero no tiene rol de conductor
+                          </div>
+                        )}
+                        {driver.documentsRejected > 0 && driver.documentsState === 'rechazado' && driver.rejectionReason && (
+                          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                            <span className="font-medium">Motivo de rechazo:</span> {driver.rejectionReason}
                           </div>
                         )}
 

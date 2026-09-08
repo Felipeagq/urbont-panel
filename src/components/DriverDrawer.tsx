@@ -6,9 +6,22 @@ import { formatDate, formatRelativeTime } from '@/lib/utils';
 import {
   X, Phone, Mail, Star, MapPin, Calendar, Car, Shield, ShieldCheck,
   UserX, UserCheck, Ban, MessageSquare, Loader2, ChevronRight,
-  DollarSign, Clock, Hash, FileText, AlertTriangle
+  DollarSign, Clock, Hash, FileText, AlertTriangle, ExternalLink,
+  CheckCircle2, RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
+
+interface DriverDocument {
+  id: string;
+  docKey: string;
+  state: 'aprobado' | 'pendiente' | 'rechazado';
+  rawStatus: string;
+  fileName: string;
+  url: string;
+  uploadedAt: string;
+  updatedAt: string;
+  required: boolean;
+}
 
 interface Driver {
   id: string;
@@ -18,29 +31,73 @@ interface Driver {
   status: 'active' | 'suspended' | 'inactive' | 'pending' | 'banned';
   rating: number;
   ridesCompleted: number;
+  ridesCancelled: number;
+  ridesAssigned: number;
+  lastRideAt?: string;
+  lastRide?: string;
+  earnings: number;
+  earningsGross: number;
+  earningsNet: number;
   vehicle: string;
+  vehicleMake: string;
+  vehicleModel: string;
+  vehicleYear: string;
   plate: string;
   vehicleColor: string;
-  vehicleYear?: string;
-  vehicleModel?: string;
-  verificationStatus: string;
+  vehiclePhotoUrl: string;
+  hasVehicle: boolean;
   createdAt: string;
-  lastRide?: string;
-  totalEarnings?: number;
   suspensionReason?: string;
+
+  // Estado de documentos (nuevo)
+  documentsState: 'aprobado' | 'pendiente' | 'rechazado' | 'sin_documentos';
+  documentsApproved: number;
+  documentsPending: number;
+  documentsRejected: number;
+  documentsTotal: number;
+  rejectionReason?: string;
+
+  // Banderas de inconsistencia
+  verificationMismatch: boolean;
+  approvedWithoutVehicle: boolean;
+  roleMismatch: boolean;
+
+  // Documentos individuales, ordenados por tipo
+  documents: DriverDocument[];
+
+  // Viajes del conductor
+  rides?: DriverTrip[];
+
+  // Fuentes para auditoría
+  verificationStatus?: string;
+  backgroundCheckStatus?: string;
   documentStatus?: string;
   tier?: string;
 }
 
-interface Trip {
+interface DriverTrip {
   id: string;
-  passengerName: string;
+  date?: string;
+  status: string;
+  passenger?: string;
+  passengerName?: string;
   origin: string;
   destination: string;
-  status: string;
   fare: number;
-  createdAt: string;
+  totalPrice?: number;
+  tipAmount?: number;
+  distanceMiles?: number;
+  durationMinutes?: number;
+  vehicleType?: string;
+  paymentMethod?: string;
+  paymentStatus?: string;
+  rating?: number;
+  cancelReason?: string;
+  completedAt?: string;
+  cancelledAt?: string;
+  createdAt?: string;
 }
+
 
 interface DriverDrawerProps {
   driver: Driver | null;
@@ -75,12 +132,16 @@ const STATUS_CONFIG: Record<string, { label: string; class: string; dot: string 
 
 export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawerProps) {
   const [tab, setTab] = useState<'info' | 'trips' | 'acciones'>('info');
-  const [trips, setTrips] = useState<Trip[]>([]);
-  const [tripsLoading, setTripsLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [suspendReason, setSuspendReason] = useState('');
   const [noteText, setNoteText] = useState('');
   const [showSuspendForm, setShowSuspendForm] = useState(false);
+
+  // Documentos: modal para rechazar/request-reupload
+  const [docActionType, setDocActionType] = useState<'reject' | 'reupload' | null>(null);
+  const [docActionId, setDocActionId] = useState<string | null>(null);
+  const [docActionReason, setDocActionReason] = useState('');
+  const [docLoading, setDocLoading] = useState<string | null>(null);
 
   useEffect(() => {
     if (!driver) return;
@@ -90,15 +151,6 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
     setShowSuspendForm(false);
   }, [driver?.id]);
 
-  useEffect(() => {
-    if (tab === 'trips' && driver) {
-      setTripsLoading(true);
-      adminFetch(`/drivers/${driver.id}/trips`)
-        .then(setTrips)
-        .catch(() => setTrips([]))
-        .finally(() => setTripsLoading(false));
-    }
-  }, [tab, driver?.id]);
 
   const doAction = async (action: string, body?: object) => {
     if (!driver) return;
@@ -127,6 +179,37 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
     }
   };
 
+  const handleDocAction = async (docId: string, action: 'approve' | 'reject' | 'reupload') => {
+    if (!driver) return;
+    setDocLoading(docId);
+    try {
+      const endpoint = action === 'approve' ? 'approve' :
+                       action === 'reject' ? 'reject' :
+                       'request-reupload';
+      const body = (action === 'reject' || action === 'reupload') ? { notes: docActionReason } : undefined;
+
+      await adminFetch(`/admin/documents/${docId}/${endpoint}`, {
+        method: 'POST',
+        body: body ? JSON.stringify(body) : undefined,
+      });
+
+      const msgs: Record<string, string> = {
+        approve: 'Documento aprobado',
+        reject: 'Documento rechazado',
+        reupload: 'Se pidió re-subida',
+      };
+      toast.success(msgs[action] ?? 'Acción completada');
+      setDocActionType(null);
+      setDocActionId(null);
+      setDocActionReason('');
+      onRefresh();
+    } catch (err: any) {
+      toast.error(err.message || 'Error al procesar documento');
+    } finally {
+      setDocLoading(null);
+    }
+  };
+
   if (!driver) return null;
 
   const st = STATUS_CONFIG[driver.status] ?? STATUS_CONFIG.inactive;
@@ -150,9 +233,9 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
                   <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
                   {st.label}
                 </span>
-                {driver.verificationStatus === 'verified' && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-600">
-                    <ShieldCheck className="w-3 h-3" /> Verificado
+                {driver.documentsState === 'aprobado' && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-600">
+                    <ShieldCheck className="w-3 h-3" /> Documentos Aprobados
                   </span>
                 )}
                 {driver.tier && (
@@ -173,7 +256,7 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
           {[
             { label: 'Viajes', value: driver.ridesCompleted.toLocaleString(), icon: MapPin, color: 'text-blue-600' },
             { label: 'Rating', value: (driver.rating != null ? driver.rating.toFixed(2) : '—'), icon: Star, color: 'text-amber-500' },
-            { label: 'Ganancias', value: formatCurrency(driver.totalEarnings), icon: DollarSign, color: 'text-emerald-600' },
+            { label: 'Ganancias', value: formatCurrency(driver.earnings), icon: DollarSign, color: 'text-emerald-600' },
             { label: 'Último viaje', value: driver.lastRide ? formatRelativeTime(driver.lastRide) : '—', icon: Clock, color: 'text-gray-400' },
           ].map(k => (
             <div key={k.label} className="p-3 text-center">
@@ -236,18 +319,112 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
                 <div className="flex items-center gap-3 text-sm">
                   <FileText className="w-4 h-4 text-gray-400 flex-shrink-0" />
                   <span className={`font-medium ${
-                    driver.verificationStatus === 'verified' ? 'text-emerald-600' :
-                    driver.verificationStatus === 'pending' ? 'text-amber-600' : 'text-red-600'
+                    driver.documentsState === 'aprobado' ? 'text-emerald-600' :
+                    driver.documentsState === 'pendiente' ? 'text-amber-600' :
+                    driver.documentsState === 'rechazado' ? 'text-red-600' : 'text-gray-500'
                   }`}>
-                    {driver.verificationStatus === 'verified' ? 'Documentos verificados' :
-                     driver.verificationStatus === 'pending' ? 'Pendiente de verificación' :
-                     'Documentos rechazados'}
+                    {driver.documentsState === 'aprobado' ? 'Documentos aprobados' :
+                     driver.documentsState === 'pendiente' ? 'Pendiente de revisión' :
+                     driver.documentsState === 'rechazado' ? 'Documentos rechazados' :
+                     'Sin documentos'}
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    ({driver.documentsApproved}/{driver.documentsTotal})
                   </span>
                 </div>
                 {driver.documentStatus && (
                   <p className="text-xs text-gray-500 ml-7">{driver.documentStatus}</p>
                 )}
               </div>
+
+              {/* Lista de documentos */}
+              {driver.documents && driver.documents.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Archivos</p>
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {driver.documents.map(doc => {
+                      const stateColors = {
+                        'aprobado': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                        'pendiente': 'bg-amber-50 text-amber-700 border-amber-200',
+                        'rechazado': 'bg-red-50 text-red-700 border-red-200'
+                      };
+                      const stateBadgeColor = stateColors[doc.state] || 'bg-gray-50 text-gray-700 border-gray-200';
+                      const docLabel = doc.docKey.replace(/([A-Z])/g, ' $1').trim();
+                      const isLoading = docLoading === doc.id;
+
+                      return (
+                        <div key={doc.id} className="flex flex-col gap-2 p-2.5 rounded-lg border border-gray-100 bg-gray-50">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-gray-900 truncate">
+                                {docLabel}
+                                {!doc.required && <span className="ml-1 text-gray-400">(obsoleto)</span>}
+                              </p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium border ${stateBadgeColor}`}>
+                                  {doc.state === 'aprobado' ? '✓ Aprobado' :
+                                   doc.state === 'pendiente' ? '⧗ Pendiente' :
+                                   '✗ Rechazado'}
+                                </span>
+                                {doc.url && (
+                                  <a href={doc.url} target="_blank" rel="noopener noreferrer"
+                                     className="text-[10px] text-blue-600 hover:underline flex items-center gap-0.5">
+                                    <ExternalLink className="w-3 h-3" />
+                                    Ver
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Botones de acción según el estado */}
+                          {doc.state === 'pendiente' && (
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleDocAction(doc.id, 'approve')}
+                                disabled={isLoading}
+                                className="flex-1 px-2 py-1 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded text-[10px] font-medium disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
+                              >
+                                {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+                                Aprobar
+                              </button>
+                              <button
+                                onClick={() => { setDocActionType('reject'); setDocActionId(doc.id); }}
+                                disabled={isLoading}
+                                className="flex-1 px-2 py-1 bg-red-100 text-red-700 hover:bg-red-200 rounded text-[10px] font-medium disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
+                              >
+                                <Ban className="w-3 h-3" />
+                                Rechazar
+                              </button>
+                            </div>
+                          )}
+
+                          {doc.state === 'rechazado' && (
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleDocAction(doc.id, 'approve')}
+                                disabled={isLoading}
+                                className="flex-1 px-2 py-1 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded text-[10px] font-medium disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
+                              >
+                                {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+                                Aprobar
+                              </button>
+                              <button
+                                onClick={() => { setDocActionType('reupload'); setDocActionId(doc.id); }}
+                                disabled={isLoading}
+                                className="flex-1 px-2 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded text-[10px] font-medium disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
+                              >
+                                <RefreshCw className="w-3 h-3" />
+                                Pedir re-subida
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {driver.suspensionReason && (
                 <div className="bg-red-50 border border-red-100 rounded-lg p-3">
@@ -262,18 +439,14 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
 
           {tab === 'trips' && (
             <div>
-              {tripsLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
-                </div>
-              ) : trips.length === 0 ? (
+              {!driver.rides || driver.rides.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-2">
                   <MapPin className="w-8 h-8 text-gray-200" />
                   <p className="text-sm text-gray-400">Sin viajes registrados</p>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {trips.slice(0, 20).map(trip => (
+                  {driver.rides.slice(0, 20).map(trip => (
                     <div key={trip.id} className="bg-gray-50 rounded-lg p-3">
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
@@ -281,7 +454,7 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
                             {trip.origin} <ChevronRight className="w-3 h-3 inline text-gray-400" /> {trip.destination}
                           </p>
                           <p className="text-[11px] text-gray-500 mt-0.5">
-                            {trip.passengerName} · {formatRelativeTime(trip.createdAt)}
+                            {trip.passengerName || trip.passenger || '—'} · {formatRelativeTime(trip.date || trip.createdAt || '')}
                           </p>
                         </div>
                         <div className="text-right flex-shrink-0">
@@ -372,7 +545,7 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
                 Reactivar
               </button>
             )}
-            {(driver.status === 'pending' || driver.verificationStatus === 'pending') && (
+            {(driver.status === 'pending' || driver.documentsState === 'pendiente') && (
               <button
                 onClick={() => doAction('verify')}
                 disabled={!!actionLoading}
@@ -403,6 +576,55 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
           </div>
         </div>
       </div>
+
+      {/* Modal para rechazar/pedir re-subida de documento */}
+      {(docActionType === 'reject' || docActionType === 'reupload') && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center backdrop-blur-[1px]">
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-96 max-w-[90vw]">
+            <p className="text-sm font-semibold text-gray-900 mb-4">
+              {docActionType === 'reject' ? 'Rechazar documento' : 'Pedir re-subida'}
+            </p>
+            <textarea
+              autoFocus
+              placeholder={docActionType === 'reject'
+                ? 'Motivo del rechazo (se enviará al conductor)...'
+                : 'Motivo de la solicitud (se enviará al conductor)...'}
+              value={docActionReason}
+              onChange={e => setDocActionReason(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 mb-4"
+              rows={4}
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setDocActionType(null);
+                  setDocActionId(null);
+                  setDocActionReason('');
+                }}
+                className="flex-1 px-3 py-2 border border-gray-200 text-gray-600 bg-white hover:bg-gray-50 rounded-lg text-xs font-medium transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  if (docActionId && docActionReason.trim()) {
+                    handleDocAction(docActionId, docActionType === 'reject' ? 'reject' : 'reupload');
+                  }
+                }}
+                disabled={!docActionReason.trim() || !!docLoading}
+                className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1 ${
+                  docActionType === 'reject'
+                    ? 'bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50'
+                    : 'bg-blue-100 text-blue-700 hover:bg-blue-200 disabled:opacity-50'
+                }`}
+              >
+                {docLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                {docActionType === 'reject' ? 'Rechazar' : 'Pedir re-subida'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
