@@ -39,11 +39,23 @@ const DOC_TYPES: Record<string, string> = {
   ine:              'INE / Identificación',
   // Claves que llegan hoy desde el backend (ver /documents en producción)
   photo:            'Foto de perfil',
-  taxId:            'Tax ID',
+  taxId:            'Tax ID corporativo',
   w9:               'Formulario W-9',
-  corpFiles:        'Documentos corporativos',
+  corpFiles:        'Certificado de incorporación',
   inspection:       'Inspección vehicular',
-  portPermit:       'Permiso portuario',
+  portPermit:       'Permiso del Puerto de Miami',
+  // Resto del catálogo que pide el signup web (websitev2/src/lib/driver-documents.ts).
+  // Sin estas entradas el admin las veía en inglés técnico: docTypeLabel cae a
+  // la clave cruda cuando no hay traducción.
+  bgCheck:             'Consentimiento de antecedentes',
+  backgroundCheck:     'Verificación de antecedentes',
+  commercialInsurance: 'Seguro comercial',
+  tncPermit:           'Licencia de chofer',
+  airportPermit:       'Permiso del aeropuerto de Miami-Dade',
+  limoPermit:          'Sticker de limusina de Miami-Dade',
+  businessTaxes:       'Impuestos locales del negocio',
+  drugTest:            'Prueba antidoping',
+  defensiveDriving:    'Certificado de manejo defensivo',
 };
 
 function docTypeLabel(t: string) { return DOC_TYPES[t] ?? t; }
