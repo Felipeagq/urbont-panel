@@ -6,7 +6,8 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Car, Users, FileText, DollarSign,
   MapPin, TrendingUp, AlertTriangle, MessageSquareWarning,
-  Headphones, Star, Settings, Shield, LogOut, Menu, X, ChevronRight, CreditCard
+  Headphones, Star, Settings, Shield, LogOut, Menu, X, ChevronRight, CreditCard,
+  Globe2
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import type { AdminRole } from '@/lib/api';
@@ -30,6 +31,7 @@ const NAV_ITEMS: NavItem[] = [
   { name: 'rides',       label: 'Viajes',           href: '/rides',      icon: MapPin,               roles: ['owner','support','operations','analyst'],             group: 'ops' },
   { name: 'documents',   label: 'Documentos',       href: '/documents',  icon: FileText,             roles: ['owner','operations'],                                 group: 'ops' },
   { name: 'fares',       label: 'Tarifas',          href: '/fares',      icon: DollarSign,           roles: ['owner','developer','operations'],                     group: 'ops' },
+  { name: 'zones',       label: 'Zonas',            href: '/zones',      icon: Globe2,               roles: ['owner','developer','operations'],                     group: 'ops' },
   { name: 'revenue',     label: 'Ingresos',         href: '/revenue',    icon: TrendingUp,           roles: ['owner','operations','analyst'],                       group: 'ops' },
   { name: 'incidents',   label: 'Incidentes',       href: '/incidents',  icon: AlertTriangle,        roles: ['owner','support','operations'],                       group: 'ops' },
   { name: 'complaints',  label: 'Quejas',           href: '/complaints', icon: MessageSquareWarning, roles: ['owner','support','operations'],                       group: 'ops' },

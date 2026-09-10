@@ -69,7 +69,11 @@ export async function adminFetch(endpoint: string, options: RequestInit = {}): P
   if (contentType && contentType.includes('application/json')) {
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.message || 'API Error');
+      // El backend responde `{ error }`; sólo algunas rutas mandan `message`.
+      // Leer únicamente `message` convertía todos los fallos en un «API Error»
+      // genérico y tiraba a la basura mensajes que existen para ser leídos, como
+      // el 409 de «no puedes desactivar la última zona activa».
+      throw new Error(data.error || data.message || 'API Error');
     }
     return data;
   }
