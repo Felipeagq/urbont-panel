@@ -2,7 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { adminFetch } from '@/lib/api';
-import { DollarSign, RefreshCw, Save, AlertTriangle, Loader2, Info, TrendingUp } from 'lucide-react';
+import {
+  DollarSign, RefreshCw, Save, AlertTriangle, Loader2, Info, TrendingUp,
+  Car, CarFront, Truck, type LucideIcon,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -64,10 +67,15 @@ const FIELD_GROUPS: Array<{ title: string; fields: FieldMeta[] }> = [
   { title: 'Cargos fijos',         fields: FEE_FIELDS },
 ];
 
-const CLASS_ICONS: Record<string, string> = {
-  sedan: '🚗',
-  suv:   '🚙',
-  van:   '🚐',
+/**
+ * Iconos por clase de vehículo. Van como componentes de lucide, no como emoji:
+ * el emoji lo dibuja la fuente del sistema, así que cambia de forma y de color
+ * entre macOS, Windows y Android, y no hereda el color del texto.
+ */
+const CLASS_ICONS: Record<string, LucideIcon> = {
+  sedan: Car,       // perfil bajo
+  suv:   CarFront,  // frontal, más ancho
+  van:   Truck,     // silueta de furgón
 };
 
 /** Comisión de plataforma. Debe coincidir con PLATFORM_COMMISSION del backend. */
@@ -276,6 +284,7 @@ export default function Fares() {
         {classes.map(vc => {
           const cfg = fares[vc];
           const dirty = isDirtyClass(vc);
+          const Icon = CLASS_ICONS[vc] ?? Car;
           return (
             <button
               key={vc}
@@ -286,7 +295,7 @@ export default function Fares() {
                   : 'border-gray-200 text-gray-600 bg-white hover:border-gray-300'
               }`}
             >
-              <span>{CLASS_ICONS[vc] ?? '🚗'}</span>
+              <Icon className="w-4 h-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
               {cfg.name}
               {dirty && (
                 <span className="w-2 h-2 rounded-full bg-amber-500 flex-shrink-0" title="Cambios sin guardar" />
@@ -300,7 +309,14 @@ export default function Fares() {
       {currentFare && (
         <div className="bg-white rounded-xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3">
-            <span className="text-2xl">{CLASS_ICONS[currentClass] ?? '🚗'}</span>
+            {(() => {
+              const Icon = CLASS_ICONS[currentClass] ?? Car;
+              return (
+                <span className="flex items-center justify-center w-10 h-10 rounded-lg bg-(--brand-pale) text-(--brand) shrink-0">
+                  <Icon className="w-5 h-5" strokeWidth={1.75} aria-hidden="true" />
+                </span>
+              );
+            })()}
             <div>
               <h2 className="text-sm font-bold text-gray-900">{currentFare.name}</h2>
               <p className="text-xs text-gray-400 uppercase tracking-wider">{currentClass}</p>
