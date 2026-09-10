@@ -6,54 +6,100 @@ import { DollarSign, RefreshCw, Save, AlertTriangle, Loader2, Info, TrendingUp }
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 
+/**
+ * Los mismos campos que aplica el motor de cobro (server/config/pricing.ts).
+ *
+ * Antes esta pantalla editaba once campos, de los cuales cuatro no existían en
+ * ningún cálculo: `peakMultiplier`, `airportSurcharge`, `nightSurcharge` y el
+ * `perKm` del esquema por kilómetro. Se configuraban, se guardaban, y no se
+ * aplicaban nunca.
+ */
 interface FareConfig {
   name: string;
-  baseFare: number;
-  perKm?: number;
-  perMile?: number;
-  perMin: number;
   minFare: number;
-  includedMiles?: number;
-  includedKm?: number;
+  includedMiles: number;
+  perMile: number;
+  perMin: number;
   serviceFee: number;
   cancellationFee: number;
-  peakMultiplier: number;
-  airportSurcharge: number;
-  nightSurcharge: number;
+  perHour: number;
+  minHours: number;
 }
 
 interface FaresData {
   [key: string]: FareConfig;
 }
 
-const FIELD_META: Array<{
+type FieldMeta = {
   key: keyof FareConfig;
   label: string;
   prefix?: string;
   suffix?: string;
   desc?: string;
-  optional?: boolean;
-}> = [
-  { key: 'baseFare',         label: 'Tarifa base',          prefix: '$',  desc: 'Costo inicial del viaje' },
-  { key: 'perKm',            label: 'Por kilómetro',        prefix: '$',  desc: 'Costo por km recorrido', optional: true },
-  { key: 'perMile',          label: 'Por milla',            prefix: '$',  desc: 'Costo por milla recorrida', optional: true },
-  { key: 'perMin',           label: 'Por minuto',           prefix: '$',  desc: 'Costo por minuto de viaje' },
-  { key: 'minFare',          label: 'Tarifa mínima',        prefix: '$',  desc: 'Cobro mínimo garantizado' },
-  { key: 'serviceFee',       label: 'Cargo de servicio',    prefix: '$',  desc: 'Cargo fijo por servicio' },
-  { key: 'cancellationFee',  label: 'Cargo por cancelación', prefix: '$', desc: 'Penalización por cancelar tarde' },
-  { key: 'peakMultiplier',   label: 'Multiplicador pico',   suffix: 'x',  desc: 'Factor de precio dinámico en horas pico' },
-  { key: 'airportSurcharge', label: 'Recargo aeropuerto',   prefix: '$',  desc: 'Cargo extra por viajes al aeropuerto' },
-  { key: 'nightSurcharge',   label: 'Recargo nocturno',     prefix: '$',  desc: 'Cargo adicional en horario nocturno' },
+};
+
+/** Tarifa por distancia — el viaje normal. */
+const DISTANCE_FIELDS: FieldMeta[] = [
+  { key: 'minFare',         label: 'Tarifa mínima',   prefix: '$', desc: 'Cubre las millas incluidas' },
+  { key: 'includedMiles',   label: 'Millas incluidas', suffix: 'mi', desc: 'Cubiertas por la tarifa mínima' },
+  { key: 'perMile',         label: 'Por milla',       prefix: '$', desc: 'A partir de las millas incluidas' },
+  { key: 'perMin',          label: 'Por minuto',      prefix: '$', desc: 'Espera y tráfico' },
+];
+
+/** Chofer a disposición — se cobra por bloque de horas, no por distancia. */
+const HOURLY_FIELDS: FieldMeta[] = [
+  { key: 'perHour',  label: 'Por hora',       prefix: '$', desc: 'Precio de cada hora reservada' },
+  { key: 'minHours', label: 'Horas mínimas',  suffix: 'h', desc: 'Se cobran aunque se pidan menos' },
+];
+
+/** Cargos fijos — el recargo por demanda nunca los multiplica. */
+const FEE_FIELDS: FieldMeta[] = [
+  { key: 'serviceFee',      label: 'Cargo de reserva',     prefix: '$', desc: 'Fijo, se suma a todo viaje' },
+  { key: 'cancellationFee', label: 'Cargo por cancelación', prefix: '$', desc: 'Penalización por cancelar tarde' },
+];
+
+const FIELD_GROUPS: Array<{ title: string; fields: FieldMeta[] }> = [
+  { title: 'Tarifa por distancia', fields: DISTANCE_FIELDS },
+  { title: 'Tarifa por hora',      fields: HOURLY_FIELDS },
+  { title: 'Cargos fijos',         fields: FEE_FIELDS },
 ];
 
 const CLASS_ICONS: Record<string, string> = {
-  urbont_x: '🚗',
-  urbont_xl: '🚙',
-  urbont_pro: '🏎️',
-  urbont_van: '🚐',
-  urbont_moto: '🏍️',
-  concierge: '🌟',
+  sedan: '🚗',
+  suv:   '🚙',
+  van:   '🚐',
 };
+
+/** Comisión de plataforma. Debe coincidir con PLATFORM_COMMISSION del backend. */
+const PLATFORM_COMMISSION = 0.10;
+/** El backend redondea en cada paso, no sólo al final: el orden cambia el centavo. */
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Espejo de `calculateFareFromRules` (server/config/pricing.ts), sin recargo.
+ *
+ * La versión anterior de esta vista previa usaba una fórmula inventada —mezclaba
+ * `perKm` con `perMile`, ignoraba las millas incluidas, el factor 0.25 de la
+ * espera y la comisión— así que mostraba un número que no se parecía al cobrado.
+ * Un operador decide un precio mirando esto.
+ */
+function estimarPorDistancia(f: FareConfig, millas: number, minutos: number): number {
+  const millasExtra    = Math.max(0, millas - f.includedMiles);
+  const base           = r2(f.minFare);
+  const distancia      = r2(millasExtra * f.perMile);
+  const espera         = minutos > 0 ? r2(minutos * f.perMin * 0.25) : 0;
+  const reserva        = r2(f.serviceFee);
+  const subtotal       = r2(base + distancia + espera + reserva);
+  return r2(subtotal + r2(subtotal * PLATFORM_COMMISSION));
+}
+
+/** Espejo de `calculateHourlyFare`. Cobra siempre el bloque mínimo. */
+function estimarPorHora(f: FareConfig, horas: number): number {
+  const horasCobradas = Math.max(f.minHours, horas);
+  const cargo         = r2(horasCobradas * f.perHour);
+  const subtotal      = r2(cargo + r2(f.serviceFee));
+  return r2(subtotal + r2(subtotal * PLATFORM_COMMISSION));
+}
 
 export default function Fares() {
   const [fares, setFares] = useState<FaresData | null>(null);
@@ -102,16 +148,44 @@ export default function Fares() {
     return JSON.stringify(f) !== JSON.stringify(o);
   };
 
+  /**
+   * Guarda cada clase modificada por separado.
+   *
+   * Antes esto mandaba el objeto completo (`{ sedan: {...}, suv: {...} }`) pero
+   * el endpoint espera `{ vehicleClass, updates }`: la respuesta era siempre
+   * 400 "Invalid vehicle class". El guardado de esta pantalla nunca funcionó, y
+   * por eso no había ninguna tarifa guardada en la base.
+   *
+   * Una petición por clase, además, deja una entrada de auditoría por clase, que
+   * es como conviene leerlo después.
+   */
   const handleSave = async () => {
     if (!fares) return;
+    const dirty = Object.keys(fares).filter(isDirtyClass);
+    if (dirty.length === 0) return;
+
     setSaving(true);
     setShowConfirm(false);
     try {
-      await adminFetch('/fares', {
-        method: 'PUT',
-        body: JSON.stringify(fares),
-      });
-      toast.success('Tarifas actualizadas correctamente');
+      const descartados = new Set<string>();
+      for (const vClass of dirty) {
+        const { name: _name, ...updates } = fares[vClass];
+        const res = await adminFetch('/fares', {
+          method: 'PUT',
+          body: JSON.stringify({ vehicleClass: vClass, updates }),
+        });
+        // El servidor dice qué campos ignoró. Callarlo sería repetir el problema
+        // que esta pantalla tenía: dar por guardado algo que no se aplicó.
+        for (const campo of res?.rejected ?? []) descartados.add(campo);
+      }
+
+      if (descartados.size > 0) {
+        toast.warning(`Guardado, pero el servidor ignoró: ${[...descartados].join(', ')}`);
+      } else {
+        toast.success(dirty.length === 1
+          ? 'Tarifa actualizada — ya se aplica a los viajes nuevos'
+          : `${dirty.length} tarifas actualizadas — ya se aplican a los viajes nuevos`);
+      }
       setOriginal(JSON.parse(JSON.stringify(fares)));
     } catch (err: any) {
       toast.error(err.message || 'Error al guardar las tarifas');
@@ -238,11 +312,14 @@ export default function Fares() {
             )}
           </div>
 
-          <div className="p-5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
-            {FIELD_META.filter(fm => {
-              if (fm.optional) return (currentFare as any)[fm.key] !== undefined;
-              return true;
-            }).map(fm => {
+          <div className="p-5 flex flex-col gap-6">
+            {FIELD_GROUPS.map(group => (
+              <div key={group.title}>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">
+                  {group.title}
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
+            {group.fields.map(fm => {
               const val = (currentFare as any)[fm.key];
               if (val === undefined) return null;
               const dirty = hasDirtyField(currentClass, fm.key as string);
@@ -275,34 +352,43 @@ export default function Fares() {
                 </div>
               );
             })}
+                </div>
+              </div>
+            ))}
           </div>
 
-          {/* Estimated fare preview */}
+          {/* Vista previa — misma fórmula que cobra el servidor */}
           <div className="px-5 py-4 bg-gray-50 border-t border-gray-100">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-1.5">
-              <TrendingUp className="w-3.5 h-3.5" /> Vista previa de tarifa estimada
+              <TrendingUp className="w-3.5 h-3.5" /> Lo que pagaría el pasajero, sin recargo por demanda
             </p>
-            <div className="grid grid-cols-3 gap-4 text-center">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
               {[
-                { label: 'Viaje corto (3km, 5min)', km: 3, min: 5 },
-                { label: 'Viaje medio (10km, 20min)', km: 10, min: 20 },
-                { label: 'Viaje largo (25km, 45min)', km: 25, min: 45 },
-              ].map(scenario => {
-                const perDist = (currentFare.perKm ?? currentFare.perMile ?? 0);
-                const est = Math.max(
-                  currentFare.minFare,
-                  currentFare.baseFare + (perDist * scenario.km) + (currentFare.perMin * scenario.min) + currentFare.serviceFee
-                );
-                return (
-                  <div key={scenario.label} className="bg-white rounded-lg p-3 border border-gray-100">
-                    <p className="text-[10px] text-gray-400 mb-1">{scenario.label}</p>
-                    <p className="text-lg font-bold text-gray-900">
-                      ${est.toFixed(2)}
-                    </p>
-                  </div>
-                );
-              })}
+                { label: 'Corto · 3 mi, 10 min',  miles: 3,  min: 10 },
+                { label: 'Medio · 8 mi, 20 min',  miles: 8,  min: 20 },
+                { label: 'Largo · 20 mi, 45 min', miles: 20, min: 45 },
+              ].map(s => (
+                <div key={s.label} className="bg-white rounded-lg p-3 border border-gray-100">
+                  <p className="text-[10px] text-gray-400 mb-1">{s.label}</p>
+                  <p className="text-lg font-bold text-gray-900 tabular-nums">
+                    ${estimarPorDistancia(currentFare, s.miles, s.min).toFixed(2)}
+                  </p>
+                </div>
+              ))}
+              <div className="bg-white rounded-lg p-3 border border-gray-100">
+                <p className="text-[10px] text-gray-400 mb-1">
+                  Por hora · {currentFare.minHours} h mínimo
+                </p>
+                <p className="text-lg font-bold text-gray-900 tabular-nums">
+                  ${estimarPorHora(currentFare, currentFare.minHours).toFixed(2)}
+                </p>
+              </div>
             </div>
+            <p className="text-[10px] text-gray-400 mt-3">
+              Incluye el cargo de reserva y la comisión del 10%. En horas de alta demanda
+              el recargo multiplica la tarifa mínima, la distancia y la espera, pero nunca
+              los cargos fijos.
+            </p>
           </div>
         </div>
       )}
