@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { adminFetch } from '@/lib/api';
 import {
   Globe2, RefreshCw, Save, AlertTriangle, Loader2, Plus, X,
-  Power, PowerOff, MapPin, Info, Trash2,
+  Power, PowerOff, MapPin, Info, Trash2, Search, ChevronRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -29,6 +29,8 @@ interface Zone {
   centerLat: number;
   centerLng: number;
   radiusKm: number;
+  /** ISO 3166-1 alpha-2. Sale de la ciudad al crear la zona. */
+  country: string;
 }
 
 /** La API devuelve los numéricos como texto (`"125.00"`). */
@@ -40,6 +42,7 @@ interface ZoneRow {
   center_lat: string | number | null;
   center_lng: string | number | null;
   radius_km: string | number | null;
+  country_code?: string | null;
   updated_at?: string;
 }
 
@@ -51,6 +54,7 @@ const toZone = (r: ZoneRow): Zone => ({
   centerLat: Number(r.center_lat ?? 0),
   centerLng: Number(r.center_lng ?? 0),
   radiusKm: Number(r.radius_km ?? 0),
+  country: r.country_code ?? 'US',
 });
 
 /* ── Geometría ───────────────────────────────────────────────────────────── */
@@ -74,41 +78,59 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 }
 
 /**
- * Ciudades de referencia para leer un radio en términos de negocio.
+ * Una ciudad del catálogo de GeoNames, tal como la sirve el backend.
  *
- * «125 km» no significa nada para quien decide el área; «entra Fort Lauderdale,
- * no entra Naples» sí. Sólo se muestran las más cercanas al centro de la zona,
- * así que la lista sigue siendo útil si mañana se abre una zona fuera de Florida.
+ * Antes esto era un array de 19 ciudades que escribí a mano, y eso limitaba la
+ * pantalla a Florida: abrir una zona en otro sitio dejaba la cobertura en
+ * blanco. Ahora son 34.135 ciudades de 244 países en la base.
  */
-const CIUDADES: Array<{ nombre: string; lat: number; lng: number }> = [
-  { nombre: 'Miami',            lat: 25.7617, lng: -80.1918 },
-  { nombre: 'Miami Beach',      lat: 25.7907, lng: -80.1300 },
-  { nombre: 'Fort Lauderdale',  lat: 26.1224, lng: -80.1373 },
-  { nombre: 'Boca Raton',       lat: 26.3683, lng: -80.1289 },
-  { nombre: 'West Palm Beach',  lat: 26.7153, lng: -80.0534 },
-  { nombre: 'Homestead',        lat: 25.4687, lng: -80.4776 },
-  { nombre: 'Naples',           lat: 26.1420, lng: -81.7948 },
-  { nombre: 'Fort Myers',       lat: 26.6406, lng: -81.8723 },
-  { nombre: 'Key Largo',        lat: 25.0865, lng: -80.4473 },
-  { nombre: 'Key West',         lat: 24.5551, lng: -81.7800 },
-  { nombre: 'Orlando',          lat: 28.5383, lng: -81.3792 },
-  { nombre: 'Tampa',            lat: 27.9506, lng: -82.4572 },
-  { nombre: 'Jacksonville',     lat: 30.3322, lng: -81.6557 },
-  { nombre: 'Atlanta',          lat: 33.7490, lng: -84.3880 },
-  { nombre: 'Nueva York',       lat: 40.7128, lng: -74.0060 },
-  { nombre: 'Chicago',          lat: 41.8781, lng: -87.6298 },
-  { nombre: 'Houston',          lat: 29.7604, lng: -95.3698 },
-  { nombre: 'Los Ángeles',      lat: 34.0522, lng: -118.2437 },
-  { nombre: 'Las Vegas',        lat: 36.1699, lng: -115.1398 },
-];
+interface Ciudad {
+  id: number;
+  name: string;
+  country: string;
+  admin1: string | null;
+  lat: number;
+  lng: number;
+  population: number;
+  timezone: string;
+}
 
-const ZONAS_HORARIAS = [
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'America/Phoenix',
-];
+/**
+ * Las ciudades alrededor de un centro, traídas una sola vez por centro.
+ *
+ * La clave del diseño: se pide al servidor cuando cambia el CENTRO, no cuando
+ * cambia el radio. El radio se mueve arrastrando un número y dispara un
+ * recálculo por pulsación — con red de por medio sería insoportable y además
+ * inútil, porque la respuesta no depende del radio.
+ *
+ * Ante un fallo devuelve lista vacía: la zona sigue funcionando, sólo se queda
+ * sin la referencia de qué cubre.
+ */
+function useCiudadesCercanas(lat: number, lng: number, radiusKm: number) {
+  const [ciudades, setCiudades] = useState<Ciudad[]>([]);
+
+  // El radio entra redondeado a centenas para que ajustarlo de 120 a 130 no
+  // vuelva a pedir nada: sólo importa para dimensionar la caja de búsqueda.
+  const alcance = Math.max(100, Math.ceil((radiusKm || 150) / 100) * 100);
+  const valido = Number.isFinite(lat) && Number.isFinite(lng)
+    && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+
+  useEffect(() => {
+    if (!valido) { setCiudades([]); return; }
+
+    let vigente = true;
+    // Se espera a que el operador deje de teclear coordenadas.
+    const t = setTimeout(() => {
+      adminFetch(`/cities/near?lat=${lat}&lng=${lng}&radiusKm=${alcance}`)
+        .then((r) => { if (vigente) setCiudades(r.cities ?? []); })
+        .catch(() => { if (vigente) setCiudades([]); });
+    }, 400);
+
+    return () => { vigente = false; clearTimeout(t); };
+  }, [lat, lng, alcance, valido]);
+
+  return ciudades;
+}
 
 /* ── Mapa ────────────────────────────────────────────────────────────────── */
 
@@ -120,7 +142,7 @@ const ZONAS_HORARIAS = [
  * ser un mapa — no hay costas ni calles — sino responder «¿hasta dónde llega
  * esto?» mientras se arrastra el radio.
  */
-function CroquisZona({ zona }: { zona: Zone }) {
+function CroquisZona({ zona, ciudades }: { zona: Zone; ciudades: Ciudad[] }) {
   const LADO = 260;
   const radio = Math.max(zona.radiusKm, 1);
   // El círculo ocupa el 62% del lienzo: deja aire para las ciudades de fuera,
@@ -133,9 +155,15 @@ function CroquisZona({ zona }: { zona: Zone }) {
     y: LADO / 2 - (lat - zona.centerLat) * 111 * escala,
   });
 
-  const visibles = CIUDADES
+  // El catálogo devuelve más de un centenar de ciudades alrededor de un centro;
+  // pintarlas todas daría una mancha de etiquetas superpuestas. Se quedan las
+  // que caben en el lienzo, y de ésas las 12 más pobladas: son las que alguien
+  // reconoce de un vistazo, que es para lo único que sirve este croquis.
+  const visibles = ciudades
     .map((c) => ({ ...c, ...proyectar(c.lat, c.lng), km: haversineKm(zona.centerLat, zona.centerLng, c.lat, c.lng) }))
-    .filter((c) => c.x > 6 && c.x < LADO - 6 && c.y > 6 && c.y < LADO - 6);
+    .filter((c) => c.x > 6 && c.x < LADO - 6 && c.y > 6 && c.y < LADO - 6)
+    .sort((a, b) => b.population - a.population)
+    .slice(0, 12);
 
   return (
     <svg viewBox={`0 0 ${LADO} ${LADO}`} className="w-full h-auto" role="img"
@@ -156,11 +184,11 @@ function CroquisZona({ zona }: { zona: Zone }) {
       {visibles.map((c) => {
         const dentro = c.km <= radio;
         return (
-          <g key={c.nombre}>
+          <g key={c.id}>
             <circle cx={c.x} cy={c.y} r={dentro ? 3 : 2.5}
                     className={dentro ? 'fill-emerald-600' : 'fill-gray-400'} />
             <text x={c.x + 5} y={c.y + 3} className={`text-[7px] ${dentro ? 'fill-emerald-800' : 'fill-gray-500'}`}>
-              {c.nombre}
+              {c.name}
             </text>
           </g>
         );
@@ -174,7 +202,11 @@ function CroquisZona({ zona }: { zona: Zone }) {
 
 /* ── Tarjeta de zona ─────────────────────────────────────────────────────── */
 
-type CampoNum = 'centerLat' | 'centerLng' | 'radiusKm';
+/** Los que viven plegados en «ajuste fino». El radio va aparte, siempre visible. */
+const CAMPOS_FINOS: Array<{ key: 'centerLat' | 'centerLng'; label: string }> = [
+  { key: 'centerLat', label: 'Latitud del centro' },
+  { key: 'centerLng', label: 'Longitud del centro' },
+];
 
 function TarjetaZona({
   zona, original, onChange, onGuardar, onToggle, onBorrar,
@@ -202,23 +234,26 @@ function TarjetaZona({
   if (!(zona.centerLat >= -90 && zona.centerLat <= 90)) errores.push('La latitud debe estar entre -90 y 90.');
   if (!(zona.centerLng >= -180 && zona.centerLng <= 180)) errores.push('La longitud debe estar entre -180 y 180.');
 
-  const cobertura = useMemo(() => {
-    if (!(zona.radiusKm > 0)) return { dentro: [], fuera: [] };
-    const conKm = CIUDADES
-      .map((c) => ({ ...c, km: haversineKm(zona.centerLat, zona.centerLng, c.lat, c.lng) }))
-      .sort((a, b) => a.km - b.km);
-    return {
-      dentro: conKm.filter((c) => c.km <= zona.radiusKm).slice(0, 8),
-      // Las tres de fuera más cercanas: son las candidatas si se amplía.
-      fuera: conKm.filter((c) => c.km > zona.radiusKm).slice(0, 3),
-    };
-  }, [zona.centerLat, zona.centerLng, zona.radiusKm]);
+  const ciudades = useCiudadesCercanas(zona.centerLat, zona.centerLng, zona.radiusKm);
 
-  const campos: Array<{ key: CampoNum; label: string; step: string; suffix?: string; desc: string }> = [
-    { key: 'centerLat', label: 'Latitud del centro',  step: '0.0001', desc: 'Punto desde el que se mide' },
-    { key: 'centerLng', label: 'Longitud del centro', step: '0.0001', desc: 'Punto desde el que se mide' },
-    { key: 'radiusKm',  label: 'Radio',               step: '1', suffix: 'km', desc: 'Alcance desde el centro' },
-  ];
+  const cobertura = useMemo(() => {
+    if (!(zona.radiusKm > 0)) return { dentro: [], fuera: [], totalDentro: 0 };
+    const conKm = ciudades.map((c) => ({
+      ...c, km: haversineKm(zona.centerLat, zona.centerLng, c.lat, c.lng),
+    }));
+
+    const dentro = conKm.filter((c) => c.km <= zona.radiusKm);
+    return {
+      // Por POBLACIÓN, no por cercanía. «Cubre Hialeah y Fort Lauderdale» dice
+      // algo sobre el mercado; «cubre los ocho pueblos más próximos» no dice nada.
+      dentro: [...dentro].sort((a, b) => b.population - a.population).slice(0, 8),
+      totalDentro: dentro.length,
+      // Éstas sí por cercanía: son las candidatas si se amplía el radio, y lo
+      // que importa de ellas es cuánto falta para alcanzarlas.
+      fuera: conKm.filter((c) => c.km > zona.radiusKm).sort((a, b) => a.km - b.km).slice(0, 3),
+    };
+  }, [ciudades, zona.centerLat, zona.centerLng, zona.radiusKm]);
+
 
   return (
     <div className={`bg-white rounded-xl border shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden ${
@@ -298,53 +333,74 @@ function TarjetaZona({
             <p className="text-[10px] text-gray-400 mt-1">Lo ve el equipo, no el pasajero</p>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            {campos.map((c) => (
-              <div key={c.key}>
-                <label className="block text-xs font-semibold text-gray-500 mb-1">
-                  {c.label}
-                  <span className="ml-1 text-gray-300" title={c.desc}>
-                    <Info className="w-3 h-3 inline" />
-                  </span>
-                </label>
-                <div className={`flex items-center border rounded-lg overflow-hidden transition-colors ${
-                  dirtyCampo(c.key) ? 'border-amber-400 bg-amber-50/20' : 'border-gray-200'
-                }`}>
-                  <input
-                    type="number"
-                    step={c.step}
-                    value={zona[c.key]}
-                    onChange={(e) => onChange(c.key, e.target.value === '' ? 0 : parseFloat(e.target.value))}
-                    className="flex-1 w-full px-3 py-2 text-sm focus:outline-none bg-transparent text-gray-900 font-medium tabular-nums"
-                  />
-                  {c.suffix && (
-                    <span className="px-2.5 text-sm text-gray-400 border-l border-gray-200 bg-gray-50">{c.suffix}</span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="max-w-xs">
+          {/* El radio es el único número que se toca a diario: va solo y arriba. */}
+          <div className="max-w-[200px]">
             <label className="block text-xs font-semibold text-gray-500 mb-1">
-              Zona horaria
-              <span className="ml-1 text-gray-300" title="El recargo por demanda se calcula con la hora local de la ciudad">
+              Radio
+              <span className="ml-1 text-gray-300" title="Alcance desde el centro de la zona">
                 <Info className="w-3 h-3 inline" />
               </span>
             </label>
-            <select
-              value={zona.timezone}
-              onChange={(e) => onChange('timezone', e.target.value)}
-              className={`w-full px-3 py-2 text-sm border rounded-lg bg-white text-gray-900 font-medium focus:outline-none ${
-                dirtyCampo('timezone') ? 'border-amber-400 bg-amber-50/20' : 'border-gray-200'
-              }`}
-            >
-              {[...new Set([zona.timezone, ...ZONAS_HORARIAS])].map((tz) => (
-                <option key={tz} value={tz}>{tz}</option>
-              ))}
-            </select>
-            <p className="text-[10px] text-gray-400 mt-1">Define a qué hora local se aplica el recargo por demanda</p>
+            <div className={`flex items-center border rounded-lg overflow-hidden transition-colors ${
+              dirtyCampo('radiusKm') ? 'border-amber-400 bg-amber-50/20' : 'border-gray-200'
+            }`}>
+              <input
+                type="number"
+                step="1"
+                value={zona.radiusKm}
+                onChange={(e) => onChange('radiusKm', e.target.value === '' ? 0 : parseFloat(e.target.value))}
+                className="flex-1 w-full px-3 py-2 text-sm focus:outline-none bg-transparent text-gray-900 font-medium tabular-nums"
+              />
+              <span className="px-2.5 text-sm text-gray-400 border-l border-gray-200 bg-gray-50">km</span>
+            </div>
           </div>
+
+          {/* Centro y zona horaria se pliegan: los rellena la ciudad al crear la
+              zona, y sólo se tocan para corregir. No se quitan, porque las
+              coordenadas siguen siendo la verdad en la base. */}
+          <details className="group">
+            <summary className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 cursor-pointer hover:text-gray-600 select-none list-none flex items-center gap-1.5">
+              <ChevronRight className="w-3 h-3 transition-transform group-open:rotate-90" aria-hidden="true" />
+              Ajuste fino del centro
+              {(dirtyCampo('centerLat') || dirtyCampo('centerLng') || dirtyCampo('timezone')) && (
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Cambios sin guardar aquí dentro" />
+              )}
+            </summary>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-3">
+              {CAMPOS_FINOS.map((c) => (
+                <div key={c.key}>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">{c.label}</label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    value={zona[c.key]}
+                    onChange={(e) => onChange(c.key, e.target.value === '' ? 0 : parseFloat(e.target.value))}
+                    className={`w-full px-3 py-2 text-sm border rounded-lg bg-transparent text-gray-900 font-medium tabular-nums focus:outline-none ${
+                      dirtyCampo(c.key) ? 'border-amber-400 bg-amber-50/20' : 'border-gray-200'
+                    }`}
+                  />
+                </div>
+              ))}
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Zona horaria</label>
+                <input
+                  type="text"
+                  value={zona.timezone}
+                  onChange={(e) => onChange('timezone', e.target.value)}
+                  placeholder="America/New_York"
+                  className={`w-full px-3 py-2 text-sm border rounded-lg bg-transparent text-gray-900 font-medium focus:outline-none ${
+                    dirtyCampo('timezone') ? 'border-amber-400 bg-amber-50/20' : 'border-gray-200'
+                  }`}
+                />
+              </div>
+            </div>
+            <p className="text-[10px] text-gray-400 mt-2">
+              La zona horaria decide a qué hora local se aplica el recargo por demanda.
+              La rellena la ciudad al crear la zona; cámbiala sólo si sabes que está mal.
+            </p>
+          </details>
 
           {/* Cobertura, en ciudades y no en kilómetros */}
           <div className="border-t border-gray-100 pt-4">
@@ -353,16 +409,23 @@ function TarjetaZona({
             </p>
             {cobertura.dentro.length === 0 ? (
               <p className="text-xs text-gray-500">
-                Ninguna ciudad de referencia entra en el área. Comprueba el centro y el radio.
+                Ninguna ciudad del catálogo entra en el área. Comprueba el centro y el radio.
               </p>
             ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {cobertura.dentro.map((c) => (
-                  <span key={c.nombre} className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    {c.nombre} <span className="text-emerald-500/70 tabular-nums">{Math.round(c.km)} km</span>
-                  </span>
-                ))}
-              </div>
+              <>
+                <div className="flex flex-wrap gap-1.5">
+                  {cobertura.dentro.map((c) => (
+                    <span key={c.id} className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      {c.name} <span className="text-emerald-500/70 tabular-nums">{Math.round(c.km)} km</span>
+                    </span>
+                  ))}
+                </div>
+                {cobertura.totalDentro > cobertura.dentro.length && (
+                  <p className="text-[10px] text-gray-400 mt-1.5 tabular-nums">
+                    Las {cobertura.dentro.length} más pobladas de {cobertura.totalDentro} poblaciones dentro del área.
+                  </p>
+                )}
+              </>
             )}
             {cobertura.fuera.length > 0 && (
               <>
@@ -371,8 +434,8 @@ function TarjetaZona({
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {cobertura.fuera.map((c) => (
-                    <span key={c.nombre} className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 border border-gray-200">
-                      {c.nombre} <span className="tabular-nums">{Math.round(c.km)} km</span>
+                    <span key={c.id} className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 border border-gray-200">
+                      {c.name} <span className="tabular-nums">{Math.round(c.km)} km</span>
                     </span>
                   ))}
                 </div>
@@ -384,7 +447,7 @@ function TarjetaZona({
         {/* Croquis */}
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Área</p>
-          <CroquisZona zona={zona} />
+          <CroquisZona zona={zona} ciudades={ciudades} />
           <p className="text-[10px] text-gray-400 mt-2">
             Croquis a escala. Los anillos marcan un cuarto, la mitad y tres cuartos del radio.
           </p>
@@ -415,7 +478,15 @@ function TarjetaZona({
 
 /* ── Alta de zona ────────────────────────────────────────────────────────── */
 
-const NUEVA = { id: '', name: '', centerLat: '', centerLng: '', radiusKm: '', timezone: 'America/New_York' };
+const NUEVA = {
+  id: '', name: '', centerLat: '', centerLng: '', radiusKm: '',
+  timezone: 'America/New_York', countryCode: 'US',
+};
+
+/** El identificador que el backend aceptará: sólo [a-z0-9_-]. */
+const aSlug = (s: string) =>
+  s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+   .trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 function FormularioNueva({ onCrear, onCancelar, creando }: {
   onCrear: (z: typeof NUEVA) => void;
@@ -423,25 +494,55 @@ function FormularioNueva({ onCrear, onCancelar, creando }: {
   creando: boolean;
 }) {
   const [f, setF] = useState({ ...NUEVA });
+  const [busqueda, setBusqueda] = useState('');
+  const [resultados, setResultados] = useState<Ciudad[]>([]);
+  const [buscando, setBuscando] = useState(false);
+  const [elegida, setElegida] = useState<Ciudad | null>(null);
+
   const set = (k: keyof typeof NUEVA, v: string) => setF((p) => ({ ...p, [k]: v }));
 
-  // El backend recorta el id a [a-z0-9_-]; se hace lo mismo aquí para que el
-  // operador vea desde el principio con qué identificador va a quedar la zona.
-  const slug = f.id.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
-  const lat = parseFloat(f.centerLat), lng = parseFloat(f.centerLng), radio = parseFloat(f.radiusKm);
-  const valido =
-    slug.length > 0 && f.name.trim().length > 0 &&
-    Number.isFinite(lat) && lat >= -90 && lat <= 90 &&
-    Number.isFinite(lng) && lng >= -180 && lng <= 180 &&
-    Number.isFinite(radio) && radio > 0;
+  // Búsqueda contra el catálogo, con espera para no disparar una consulta por
+  // tecla. El servidor ya ordena por población.
+  useEffect(() => {
+    const q = busqueda.trim();
+    if (q.length < 2 || elegida) { setResultados([]); return; }
 
-  const campos: Array<{ k: keyof typeof NUEVA; label: string; ph: string; type?: string; step?: string }> = [
-    { k: 'id',        label: 'Identificador', ph: 'orlando' },
-    { k: 'name',      label: 'Nombre',        ph: 'Orlando / Centro de Florida' },
-    { k: 'centerLat', label: 'Latitud',       ph: '28.5383', type: 'number', step: '0.0001' },
-    { k: 'centerLng', label: 'Longitud',      ph: '-81.3792', type: 'number', step: '0.0001' },
-    { k: 'radiusKm',  label: 'Radio (km)',    ph: '80', type: 'number', step: '1' },
-  ];
+    let vigente = true;
+    setBuscando(true);
+    const t = setTimeout(() => {
+      adminFetch(`/cities?q=${encodeURIComponent(q)}`)
+        .then((r) => { if (vigente) setResultados(r.cities ?? []); })
+        .catch(() => { if (vigente) setResultados([]); })
+        .finally(() => { if (vigente) setBuscando(false); });
+    }, 300);
+
+    return () => { vigente = false; clearTimeout(t); setBuscando(false); };
+  }, [busqueda, elegida]);
+
+  /** Una ciudad del catálogo rellena todo menos el radio. */
+  const elegir = (c: Ciudad) => {
+    setElegida(c);
+    setBusqueda(`${c.name}, ${c.country}`);
+    setResultados([]);
+    setF((p) => ({
+      ...p,
+      id: aSlug(c.name),
+      name: c.name,
+      centerLat: String(c.lat),
+      centerLng: String(c.lng),
+      timezone: c.timezone,
+      countryCode: c.country,
+    }));
+  };
+
+  const limpiar = () => {
+    setElegida(null);
+    setBusqueda('');
+    setF({ ...NUEVA, radiusKm: f.radiusKm });
+  };
+
+  const radio = parseFloat(f.radiusKm);
+  const valido = elegida !== null && f.id.length > 0 && Number.isFinite(radio) && radio > 0;
 
   return (
     <div className="bg-white rounded-xl border border-(--brand) shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden">
@@ -458,37 +559,100 @@ function FormularioNueva({ onCrear, onCancelar, creando }: {
         </button>
       </div>
 
-      <div className="p-5 grid grid-cols-2 lg:grid-cols-6 gap-4">
-        {campos.map((c) => (
-          <div key={c.k}>
-            <label className="block text-xs font-semibold text-gray-500 mb-1">{c.label}</label>
-            <input
-              type={c.type ?? 'text'}
-              step={c.step}
-              placeholder={c.ph}
-              value={f[c.k]}
-              onChange={(e) => set(c.k, e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-transparent text-gray-900 font-medium focus:outline-none focus:border-(--brand)"
-            />
-            {c.k === 'id' && slug !== f.id.trim() && f.id.trim() !== '' && (
-              <p className="text-[10px] text-amber-600 mt-1">Quedará como <code>{slug || '—'}</code></p>
+      <div className="p-5 flex flex-col gap-4">
+        <div className="grid sm:grid-cols-[1fr_160px] gap-4 items-start">
+          {/* Buscador de ciudad */}
+          <div className="relative">
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Ciudad</label>
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+              <input
+                type="text"
+                value={busqueda}
+                onChange={(e) => { setBusqueda(e.target.value); if (elegida) setElegida(null); }}
+                placeholder="Escribe una ciudad: Orlando, Bogotá, Madrid…"
+                autoComplete="off"
+                className="w-full pl-9 pr-9 py-2 text-sm border border-gray-200 rounded-lg bg-transparent text-gray-900 font-medium focus:outline-none focus:border-(--brand)"
+              />
+              {elegida && (
+                <button onClick={limpiar} aria-label="Elegir otra ciudad"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Los resultados llevan país y población a propósito: hay dos
+                «Madrid» en el catálogo, la de España y una de 135.000
+                habitantes en Colombia. Sin esos dos datos se elige mal. */}
+            {resultados.length > 0 && (
+              <ul className="absolute z-20 mt-1 w-full max-h-64 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg py-1">
+                {resultados.map((c) => (
+                  <li key={c.id}>
+                    <button
+                      onClick={() => elegir(c)}
+                      className="w-full text-left px-3 py-2 hover:bg-(--brand-pale) flex items-baseline gap-2"
+                    >
+                      <span className="text-sm text-gray-900 font-medium">{c.name}</span>
+                      <span className="text-xs text-gray-400">
+                        {c.admin1 ? `${c.admin1} · ` : ''}{c.country}
+                      </span>
+                      <span className="ml-auto text-[11px] text-gray-400 tabular-nums shrink-0">
+                        {c.population.toLocaleString('es')} hab.
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {buscando && busqueda.trim().length >= 2 && resultados.length === 0 && (
+              <p className="text-[11px] text-gray-400 mt-1">Buscando…</p>
+            )}
+            {!buscando && !elegida && busqueda.trim().length >= 2 && resultados.length === 0 && (
+              <p className="text-[11px] text-gray-400 mt-1">
+                Sin resultados. El catálogo cubre poblaciones de más de 15.000 habitantes.
+              </p>
+            )}
+            {elegida && (
+              <p className="text-[11px] text-emerald-700 mt-1 tabular-nums">
+                {elegida.lat.toFixed(4)}, {elegida.lng.toFixed(4)} · {elegida.timezone}
+              </p>
             )}
           </div>
-        ))}
 
-        {/* La zona horaria se elige al crear, no después: decide a qué hora local
-            se aplica el recargo por demanda, y dejarla siempre en Nueva York
-            sería falso para cualquier ciudad fuera de la costa este. */}
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 mb-1">Zona horaria</label>
-          <select
-            value={f.timezone}
-            onChange={(e) => set('timezone', e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-900 font-medium focus:outline-none focus:border-(--brand)"
-          >
-            {ZONAS_HORARIAS.map((tz) => <option key={tz} value={tz}>{tz}</option>)}
-          </select>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Radio</label>
+            <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-(--brand)">
+              <input
+                type="number"
+                step="1"
+                placeholder="80"
+                value={f.radiusKm}
+                onChange={(e) => set('radiusKm', e.target.value)}
+                className="flex-1 w-full px-3 py-2 text-sm bg-transparent text-gray-900 font-medium tabular-nums focus:outline-none"
+              />
+              <span className="px-2.5 text-sm text-gray-400 border-l border-gray-200 bg-gray-50">km</span>
+            </div>
+          </div>
         </div>
+
+        {/* Lo que se va a guardar, para que nadie cree una zona a ciegas. */}
+        {elegida && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-3 border-t border-gray-100">
+            {[
+              { label: 'Identificador', valor: f.id },
+              { label: 'Nombre',        valor: f.name },
+              { label: 'País',          valor: f.countryCode },
+              { label: 'Zona horaria',  valor: f.timezone },
+            ].map((d) => (
+              <div key={d.label}>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{d.label}</p>
+                <p className="text-sm text-gray-900 font-medium truncate" title={d.valor}>{d.valor}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-4">
@@ -496,7 +660,7 @@ function FormularioNueva({ onCrear, onCancelar, creando }: {
           El identificador no se puede cambiar después: queda grabado en cada viaje de la zona.
         </p>
         <button
-          onClick={() => onCrear({ ...f, id: slug })}
+          onClick={() => onCrear(f)}
           disabled={!valido || creando}
           className="btn-primary flex items-center gap-1.5 text-xs disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
         >
@@ -619,6 +783,7 @@ export default function Zones() {
           centerLng: parseFloat(f.centerLng),
           radiusKm: parseFloat(f.radiusKm),
           timezone: f.timezone,
+          countryCode: f.countryCode,
         }),
       });
       toast.success(`Zona ${f.name.trim()} creada. Actívala cuando esté revisada.`);
@@ -718,6 +883,14 @@ export default function Zones() {
           />
         ))
       )}
+
+      {/* La licencia CC BY 4.0 del catálogo exige atribución. */}
+      <p className="text-[10px] text-gray-400 pt-2">
+        Catálogo de ciudades:{' '}
+        <a href="https://www.geonames.org/" target="_blank" rel="noopener noreferrer"
+           className="underline hover:text-gray-600">GeoNames</a>
+        , bajo licencia CC BY 4.0. Poblaciones de más de 15.000 habitantes.
+      </p>
     </div>
   );
 }
