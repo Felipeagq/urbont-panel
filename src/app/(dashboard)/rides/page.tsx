@@ -235,7 +235,7 @@ export default function Rides() {
       ) : (
         <div className="bg-white rounded-xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden">
           {/* Header */}
-          <div className="grid grid-cols-[1.5fr_2fr_1fr_1fr_80px] gap-4 px-5 py-3 bg-gray-50 border-b border-gray-100 text-[11px] font-semibold uppercase tracking-wider text-gray-400 hidden md:grid">
+          <div className="hidden md:grid grid-cols-[1.5fr_2fr_1fr_1fr_80px] gap-4 px-5 py-3 bg-gray-50 border-b border-gray-100 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
             <span>Participantes</span>
             <span>Ruta</span>
             <span>Tarifa / Info</span>
