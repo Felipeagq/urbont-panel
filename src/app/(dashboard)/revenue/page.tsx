@@ -154,7 +154,7 @@ export default function Revenue() {
           const K = kpi.icon;
           return (
             <div key={kpi.label} className="stat-card flex items-center gap-4">
-              <div className={`w-10 h-10 rounded-xl ${kpi.iconBg} flex items-center justify-center flex-shrink-0`}>
+              <div className={`w-10 h-10 rounded-xl ${kpi.iconBg} flex items-center justify-center shrink-0`}>
                 <K className={`w-5 h-5 ${kpi.iconColor}`} />
               </div>
               <div>
@@ -225,7 +225,7 @@ export default function Revenue() {
                     <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                       <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: BRAND }} />
                     </div>
-                    <span className="text-[11px] text-gray-400 flex-shrink-0">{v.rides} viajes · {formatCurrency(v.avgFare)} avg</span>
+                    <span className="text-[11px] text-gray-400 shrink-0">{v.rides} viajes · {formatCurrency(v.avgFare)} avg</span>
                   </div>
                 </div>
               );
@@ -245,7 +245,7 @@ export default function Revenue() {
             {(data.topDrivers || []).slice(0, 8).map((d, idx) => (
               <div key={d.id} className="flex items-center gap-4 px-5 py-3.5">
                 <div className="w-6 text-[11px] font-bold text-gray-400 text-center">{idx + 1}</div>
-                <div className="w-8 h-8 rounded-full bg-(--brand-pale) flex items-center justify-center text-[11px] font-bold text-(--brand) flex-shrink-0">
+                <div className="w-8 h-8 rounded-full bg-(--brand-pale) flex items-center justify-center text-[11px] font-bold text-(--brand) shrink-0">
                   {getInitials(d.name)}
                 </div>
                 <div className="flex-1 min-w-0">

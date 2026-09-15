@@ -133,7 +133,7 @@ export default function Incidents() {
           { label: 'Críticos', value: counts.critical, bg: 'bg-red-100', text: 'text-red-700', icon: Zap },
         ].map(k => (
           <div key={k.label} className={`${k.bg} rounded-xl p-3.5 flex items-center gap-3`}>
-            <k.icon className={`w-5 h-5 ${k.text} flex-shrink-0`} />
+            <k.icon className={`w-5 h-5 ${k.text} shrink-0`} />
             <div>
               <p className={`text-xl font-bold ${k.text}`}>{k.value}</p>
               <p className={`text-[11px] ${k.text} opacity-70`}>{k.label}</p>
@@ -187,7 +187,7 @@ export default function Incidents() {
         <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="px-5 py-4 flex items-center gap-4 border-b border-gray-50">
-              <Skeleton className="w-10 h-10 rounded-lg flex-shrink-0" />
+              <Skeleton className="w-10 h-10 rounded-lg shrink-0" />
               <div className="flex-1 space-y-1.5">
                 <Skeleton className="h-4 w-56" />
                 <Skeleton className="h-3 w-40" />
@@ -198,7 +198,7 @@ export default function Incidents() {
         </div>
       ) : error ? (
         <div className="bg-red-50 border border-red-200 rounded-xl p-6 flex items-center gap-3 text-red-700">
-          <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+          <AlertTriangle className="w-5 h-5 shrink-0" />
           <p className="text-sm">{error}</p>
         </div>
       ) : filtered.length === 0 ? (
@@ -221,7 +221,7 @@ export default function Incidents() {
                     onClick={() => setExpanded(isOpen ? null : inc.id)}
                   >
                     {/* Severity dot */}
-                    <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${sv.dot}`} />
+                    <div className={`w-2 h-2 rounded-full mt-2 shrink-0 ${sv.dot}`} />
 
                     {/* Content */}
                     <div className="flex-1 min-w-0">
@@ -248,7 +248,7 @@ export default function Incidents() {
                     </div>
 
                     {/* Expand icon */}
-                    <div className="flex-shrink-0">
+                    <div className="shrink-0">
                       {isOpen ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
                     </div>
                   </div>

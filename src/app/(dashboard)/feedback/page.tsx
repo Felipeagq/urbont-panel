@@ -124,7 +124,7 @@ export default function FeedbackPage() {
         </div>
       ) : error ? (
         <div className="bg-red-50 border border-red-200 rounded-xl p-6 flex items-center gap-3 text-red-700">
-          <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+          <AlertTriangle className="w-5 h-5 shrink-0" />
           <p className="text-sm">{error}</p>
         </div>
       ) : (
@@ -150,7 +150,7 @@ export default function FeedbackPage() {
                     className={`w-full flex items-center gap-3 group rounded-lg px-2 py-1 transition-colors ${ratingFilter === d.ratingNum ? 'bg-amber-50' : 'hover:bg-gray-50'}`}
                   >
                     <span className="text-xs font-medium text-gray-500 w-4">{d.ratingNum}</span>
-                    <Star className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" fill="currentColor" />
+                    <Star className="w-3.5 h-3.5 text-amber-400 shrink-0" fill="currentColor" />
                     <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
                       <div
                         className="h-full rounded-full transition-all"

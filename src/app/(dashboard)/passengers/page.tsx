@@ -151,7 +151,7 @@ export default function Passengers() {
           <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="px-6 py-4 flex items-center gap-4 border-b border-gray-50">
-                <Skeleton className="w-9 h-9 rounded-full flex-shrink-0" />
+                <Skeleton className="w-9 h-9 rounded-full shrink-0" />
                 <div className="flex-1 space-y-1.5">
                   <Skeleton className="h-4 w-40" />
                   <Skeleton className="h-3 w-28" />
@@ -162,7 +162,7 @@ export default function Passengers() {
           </div>
         ) : error ? (
           <div className="bg-red-50 border border-red-200 rounded-xl p-6 flex items-center gap-3 text-red-700">
-            <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+            <AlertTriangle className="w-5 h-5 shrink-0" />
             <p className="text-sm">{error}</p>
           </div>
         ) : (
@@ -194,7 +194,7 @@ export default function Passengers() {
                     >
                       {/* Passenger info */}
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${av}`}>
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${av}`}>
                           {getInitials(p.name)}
                         </div>
                         <div className="min-w-0">

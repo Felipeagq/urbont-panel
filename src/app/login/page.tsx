@@ -83,7 +83,7 @@ export default function LoginPage() {
               'Integrated support system',
             ].map((label) => (
               <div key={label} className="flex items-center gap-3">
-                <div className="w-1.5 h-1.5 rounded-full bg-white/50 flex-shrink-0" />
+                <div className="w-1.5 h-1.5 rounded-full bg-white/50 shrink-0" />
                 <p className="text-white/65 text-sm">{label}</p>
               </div>
             ))}

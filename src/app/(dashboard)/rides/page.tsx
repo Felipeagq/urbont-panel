@@ -217,7 +217,7 @@ export default function Rides() {
         <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
           {Array.from({ length: 7 }).map((_, i) => (
             <div key={i} className="px-6 py-4 flex items-center gap-4 border-b border-gray-50">
-              <Skeleton className="w-8 h-8 rounded-lg flex-shrink-0" />
+              <Skeleton className="w-8 h-8 rounded-lg shrink-0" />
               <div className="flex-1 space-y-1.5">
                 <Skeleton className="h-4 w-48" />
                 <Skeleton className="h-3 w-36" />
@@ -229,7 +229,7 @@ export default function Rides() {
         </div>
       ) : error ? (
         <div className="bg-red-50 border border-red-200 rounded-xl p-6 flex items-center gap-3 text-red-700">
-          <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+          <AlertTriangle className="w-5 h-5 shrink-0" />
           <p className="text-sm">{error}</p>
         </div>
       ) : (
@@ -258,11 +258,11 @@ export default function Rides() {
                     {/* People */}
                     <div>
                       <div className="flex items-center gap-1.5 text-sm">
-                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
                         <span className="font-medium text-gray-800 truncate">{ride.passengerName || '—'}</span>
                       </div>
                       <div className="flex items-center gap-1.5 text-sm mt-1">
-                        <Car className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                        <Car className="w-3 h-3 text-gray-400 shrink-0" />
                         <span className="text-gray-500 truncate">{ride.driverName || 'Sin asignar'}</span>
                       </div>
                       <p className="text-[11px] text-gray-400 mt-1">{VEHICLE_LABELS[ride.vehicleType] || ride.vehicleType}</p>
@@ -271,12 +271,12 @@ export default function Rides() {
                     {/* Route */}
                     <div className="space-y-1 min-w-0">
                       <div className="flex items-start gap-1.5 text-xs">
-                        <div className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0 mt-0.5" />
+                        <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 mt-0.5" />
                         <span className="text-gray-600 truncate leading-relaxed">{ride.pickupAddress || '—'}</span>
                       </div>
                       <div className="ml-2 w-px h-3 bg-gray-200" />
                       <div className="flex items-start gap-1.5 text-xs">
-                        <div className="w-2 h-2 rounded-full bg-red-400 flex-shrink-0 mt-0.5" />
+                        <div className="w-2 h-2 rounded-full bg-red-400 shrink-0 mt-0.5" />
                         <span className="text-gray-600 truncate leading-relaxed">{ride.dropoffAddress || '—'}</span>
                       </div>
                     </div>

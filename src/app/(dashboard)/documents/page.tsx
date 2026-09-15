@@ -242,7 +242,7 @@ export default function Documents() {
                 </div>
               )}
             </div>
-            <span className={`badge-sm ${st.class} flex-shrink-0`}>{st.label}</span>
+            <span className={`badge-sm ${st.class} shrink-0`}>{st.label}</span>
           </div>
 
           <div className="flex items-center gap-1.5 text-[11px] text-gray-400 mb-3">
@@ -367,7 +367,7 @@ export default function Documents() {
       {/* Alert banner for pending */}
       {counts.pending > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-3">
-          <Clock className="w-4 h-4 text-amber-600 flex-shrink-0" />
+          <Clock className="w-4 h-4 text-amber-600 shrink-0" />
           <p className="text-sm text-amber-800 font-medium">
             {counts.pending} {counts.pending === 1 ? 'documento requiere' : 'documentos requieren'} revisión
           </p>
@@ -467,7 +467,7 @@ export default function Documents() {
         </div>
       ) : error ? (
         <div className="bg-red-50 border border-red-200 rounded-xl p-6 flex items-center gap-3 text-red-700">
-          <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+          <AlertTriangle className="w-5 h-5 shrink-0" />
           <p className="text-sm">{error}</p>
         </div>
       ) : filtered.length === 0 ? (
@@ -488,14 +488,14 @@ export default function Documents() {
                   aria-expanded={!isCollapsed}
                   className="w-full flex items-center gap-3 px-5 py-3.5 text-left hover:bg-gray-50/70 transition-colors"
                 >
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0 ${av}`}>
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 ${av}`}>
                     {getInitials(g.driverName)}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-900 truncate">{g.driverName}</p>
                     <p className="text-xs text-gray-400">{g.docs.length} {g.docs.length === 1 ? 'documento' : 'documentos'}</p>
                   </div>
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     {g.pending > 0 && (
                       <span className={`badge-sm ${STATUS_CONFIG.pending.class}`}>{g.pending} pendiente{g.pending === 1 ? '' : 's'}</span>
                     )}
@@ -507,8 +507,8 @@ export default function Documents() {
                     )}
                   </div>
                   {isCollapsed
-                    ? <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                    : <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+                    ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+                    : <ChevronUp className="w-4 h-4 text-gray-400 shrink-0" />}
                 </button>
 
                 {!isCollapsed && (

@@ -158,9 +158,9 @@ export default function PassengerDrawer({ passenger, onClose, onRefresh }: Passe
       {/* Drawer */}
       <div className="fixed right-0 top-0 h-full w-[480px] max-w-full bg-white z-50 shadow-2xl flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-start justify-between p-5 border-b border-gray-100 flex-shrink-0">
+        <div className="flex items-start justify-between p-5 border-b border-gray-100 shrink-0">
           <div className="flex items-center gap-4">
-            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-lg font-bold flex-shrink-0 ${av}`}>
+            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-lg font-bold shrink-0 ${av}`}>
               {getInitials(passenger.name)}
             </div>
             <div>
@@ -185,7 +185,7 @@ export default function PassengerDrawer({ passenger, onClose, onRefresh }: Passe
         </div>
 
         {/* KPI row */}
-        <div className="grid grid-cols-3 divide-x divide-gray-100 border-b border-gray-100 flex-shrink-0">
+        <div className="grid grid-cols-3 divide-x divide-gray-100 border-b border-gray-100 shrink-0">
           {[
             { label: 'Total Viajes', value: passenger.totalRides.toLocaleString(), icon: MapPin, color: 'text-blue-600' },
             { label: 'Calificación', value: (passenger.rating != null ? passenger.rating.toFixed(2) : '—'), icon: Star, color: 'text-amber-500' },
@@ -200,7 +200,7 @@ export default function PassengerDrawer({ passenger, onClose, onRefresh }: Passe
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-100 flex-shrink-0">
+        <div className="flex border-b border-gray-100 shrink-0">
           {(['info', 'trips', 'notas'] as const).map(t => (
             <button
               key={t}
@@ -229,7 +229,7 @@ export default function PassengerDrawer({ passenger, onClose, onRefresh }: Passe
                   { icon: Clock, label: `Último viaje: ${passenger.lastRide ? formatRelativeTime(passenger.lastRide) : '—'}` },
                 ].map((item, i) => (
                   <div key={i} className="flex items-center gap-3 text-sm text-gray-700">
-                    <item.icon className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <item.icon className="w-4 h-4 text-gray-400 shrink-0" />
                     <span className="break-all">{item.label}</span>
                   </div>
                 ))}
@@ -268,7 +268,7 @@ export default function PassengerDrawer({ passenger, onClose, onRefresh }: Passe
                             {trip.driverName} · {formatRelativeTime(trip.createdAt)}
                           </p>
                         </div>
-                        <div className="text-right flex-shrink-0">
+                        <div className="text-right shrink-0">
                           <p className="text-xs font-bold text-gray-900">{formatCurrency(trip.fare)}</p>
                           <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                             trip.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
@@ -325,7 +325,7 @@ export default function PassengerDrawer({ passenger, onClose, onRefresh }: Passe
         </div>
 
         {/* Action footer */}
-        <div className="border-t border-gray-100 p-4 flex-shrink-0 space-y-3">
+        <div className="border-t border-gray-100 p-4 shrink-0 space-y-3">
           {showSuspendForm ? (
             <div className="space-y-2">
               <p className="text-xs font-medium text-gray-700">Motivo de suspensión</p>

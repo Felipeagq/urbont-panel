@@ -238,7 +238,7 @@ export default function Overview() {
             <div key={card.key} className="stat-card space-y-3" data-testid={`stat-${card.key}`}>
               <div className="flex items-start justify-between">
                 <p className="text-xs font-medium text-gray-500 leading-tight pr-2">{card.label}</p>
-                <div className={`w-8 h-8 rounded-lg ${card.iconBg} flex items-center justify-center flex-shrink-0`}>
+                <div className={`w-8 h-8 rounded-lg ${card.iconBg} flex items-center justify-center shrink-0`}>
                   <Icon className={`w-4 h-4 ${card.iconColor}`} />
                 </div>
               </div>
@@ -333,7 +333,7 @@ export default function Overview() {
                 const AIcon = meta.icon;
                 return (
                   <div key={idx} className="flex gap-3 group">
-                    <div className={`w-7 h-7 rounded-lg ${meta.bg} flex items-center justify-center flex-shrink-0 mt-0.5`}>
+                    <div className={`w-7 h-7 rounded-lg ${meta.bg} flex items-center justify-center shrink-0 mt-0.5`}>
                       <AIcon className={`w-3.5 h-3.5 ${meta.color}`} />
                     </div>
                     <div className="flex-1 min-w-0">

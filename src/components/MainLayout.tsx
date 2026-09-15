@@ -80,7 +80,7 @@ function NavGroup({ label, items, location, onNavigate }: {
                 className={cn('sidebar-item', isActive ? 'sidebar-item-active' : 'sidebar-item-inactive')}
                 data-testid={`nav-${item.name}`}
               >
-                <Icon className="w-4 h-4 flex-shrink-0" />
+                <Icon className="w-4 h-4 shrink-0" />
                 <span className="flex-1 text-[13px]">{item.label}</span>
                 {isActive && <ChevronRight className="w-3.5 h-3.5 opacity-60" />}
               </div>
@@ -124,7 +124,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       {/* Logo */}
       <div className="px-4 py-5 border-b" style={{ borderColor: 'hsl(var(--sidebar-border))' }}>
         <div className="flex items-center gap-3">
-          <img src={urbontLogo} alt="Urbont" className="w-8 h-8 rounded-lg flex-shrink-0" />
+          <img src={urbontLogo} alt="Urbont" className="w-8 h-8 rounded-lg shrink-0" />
           <div className="min-w-0">
             <p className="text-white font-bold text-[15px] leading-none tracking-tight" data-testid="sidebar-logo">Urbont</p>
             <p className="text-white/45 text-[10px] uppercase tracking-widest font-medium mt-1">Command Center</p>
@@ -152,7 +152,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       <div className="px-3 py-4 border-t" style={{ borderColor: 'hsl(var(--sidebar-border))' }}>
         <div className="flex items-center gap-3 px-2 py-2 rounded-lg mb-2" style={{ background: 'rgba(255,255,255,0.06)' }}>
           <div
-            className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
             style={{ background: 'var(--brand)' }}
           >
             {getInitials(user.name)}
@@ -194,7 +194,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       )}
 
       {/* Sidebar — desktop */}
-      <div data-app-sidebar className="hidden lg:flex lg:w-[248px] lg:flex-shrink-0 lg:flex-col">
+      <div data-app-sidebar className="hidden lg:flex lg:w-[248px] lg:shrink-0 lg:flex-col">
         <div className="fixed h-screen w-[248px]">
           <SidebarContent />
         </div>
@@ -220,7 +220,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top bar */}
-        <header data-app-header className="h-14 bg-white border-b border-gray-100 flex items-center px-4 sm:px-6 flex-shrink-0 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+        <header data-app-header className="h-14 bg-white border-b border-gray-100 flex items-center px-4 sm:px-6 shrink-0 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           <button
             className="lg:hidden mr-3 p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
             onClick={() => setMobileOpen(true)}
@@ -243,7 +243,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
               En vivo
             </div>
-            <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0"
+            <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0"
               style={{ background: 'var(--brand)' }}>
               {getInitials(user.name)}
             </div>

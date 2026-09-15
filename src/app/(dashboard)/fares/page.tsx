@@ -221,7 +221,7 @@ export default function Fares() {
   if (error || !fares) {
     return (
       <div className="bg-red-50 border border-red-200 rounded-xl p-6 flex items-center gap-3 text-red-700">
-        <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+        <AlertTriangle className="w-5 h-5 shrink-0" />
         <p className="text-sm">{error ?? 'Error al cargar las tarifas'}</p>
       </div>
     );
@@ -259,13 +259,13 @@ export default function Fares() {
       {showConfirm && (
         <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 flex items-center justify-between gap-4">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
             <div>
               <p className="text-sm font-semibold text-amber-800">¿Confirmar cambios de tarifas?</p>
               <p className="text-xs text-amber-700 mt-0.5">Esto afectará inmediatamente todos los nuevos viajes en la plataforma.</p>
             </div>
           </div>
-          <div className="flex gap-2 flex-shrink-0">
+          <div className="flex gap-2 shrink-0">
             <button
               onClick={handleSave}
               disabled={saving}
@@ -298,7 +298,7 @@ export default function Fares() {
               <Icon className="w-4 h-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
               {cfg.name}
               {dirty && (
-                <span className="w-2 h-2 rounded-full bg-amber-500 flex-shrink-0" title="Cambios sin guardar" />
+                <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" title="Cambios sin guardar" />
               )}
             </button>
           );

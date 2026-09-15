@@ -245,9 +245,9 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
       <div className="fixed right-0 top-0 h-full w-[500px] max-w-full bg-white z-50 shadow-2xl flex flex-col overflow-hidden">
 
         {/* Header */}
-        <div className="flex items-start justify-between p-5 border-b border-gray-100 flex-shrink-0">
+        <div className="flex items-start justify-between p-5 border-b border-gray-100 shrink-0">
           <div className="flex items-center gap-4">
-            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-lg font-bold flex-shrink-0 ${av}`}>
+            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-lg font-bold shrink-0 ${av}`}>
               {getInitials(driver.name)}
             </div>
             <div>
@@ -276,7 +276,7 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
         </div>
 
         {/* KPI row */}
-        <div className="grid grid-cols-4 divide-x divide-gray-100 border-b border-gray-100 flex-shrink-0">
+        <div className="grid grid-cols-4 divide-x divide-gray-100 border-b border-gray-100 shrink-0">
           {[
             { label: 'Viajes', value: driver.ridesCompleted.toLocaleString(), icon: MapPin, color: 'text-blue-600' },
             { label: 'Rating', value: (driver.rating != null ? driver.rating.toFixed(2) : '—'), icon: Star, color: 'text-amber-500' },
@@ -292,7 +292,7 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-100 flex-shrink-0">
+        <div className="flex border-b border-gray-100 shrink-0">
           {(['info', 'trips', 'acciones'] as const).map(t => (
             <button
               key={t}
@@ -318,7 +318,7 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
                   { icon: Calendar, label: `Registro: ${formatDate(driver.createdAt)}` },
                 ].map((item, i) => (
                   <div key={i} className="flex items-center gap-3 text-sm text-gray-700">
-                    <item.icon className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <item.icon className="w-4 h-4 text-gray-400 shrink-0" />
                     <span className="break-all">{item.label}</span>
                   </div>
                 ))}
@@ -332,7 +332,7 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
                   { icon: Calendar, label: `Año: ${driver.vehicleYear || '—'}` },
                 ].map((item, i) => (
                   <div key={i} className="flex items-center gap-3 text-sm text-gray-700">
-                    <item.icon className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <item.icon className="w-4 h-4 text-gray-400 shrink-0" />
                     <span>{item.label}</span>
                   </div>
                 ))}
@@ -341,7 +341,7 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
               <div className="space-y-2.5">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Documentos</p>
                 <div className="flex items-center gap-3 text-sm">
-                  <FileText className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  <FileText className="w-4 h-4 text-gray-400 shrink-0" />
                   <span className={`font-medium ${
                     driver.documentsState === 'aprobado' ? 'text-emerald-600' :
                     driver.documentsState === 'pendiente' ? 'text-amber-600' :
@@ -481,7 +481,7 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
                             {trip.passengerName || trip.passenger || '—'} · {formatRelativeTime(trip.date || trip.createdAt || '')}
                           </p>
                         </div>
-                        <div className="text-right flex-shrink-0">
+                        <div className="text-right shrink-0">
                           <p className="text-xs font-bold text-gray-900">{formatCurrency(trip.fare)}</p>
                           <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                             trip.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
@@ -549,7 +549,7 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
         </div>
 
         {/* Footer actions */}
-        <div className="border-t border-gray-100 p-4 flex-shrink-0">
+        <div className="border-t border-gray-100 p-4 shrink-0">
           <div className="flex gap-2 flex-wrap">
             {driver.status !== 'suspended' && driver.status !== 'banned' && (
               <button

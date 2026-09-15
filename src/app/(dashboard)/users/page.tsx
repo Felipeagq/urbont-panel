@@ -318,7 +318,7 @@ export default function AdminUsers() {
         <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="px-5 py-4 flex items-center gap-4 border-b border-gray-50">
-              <Skeleton className="w-10 h-10 rounded-xl flex-shrink-0" />
+              <Skeleton className="w-10 h-10 rounded-xl shrink-0" />
               <div className="flex-1 space-y-1.5">
                 <Skeleton className="h-4 w-36" />
                 <Skeleton className="h-3 w-48" />
@@ -329,7 +329,7 @@ export default function AdminUsers() {
         </div>
       ) : error ? (
         <div className="bg-red-50 border border-red-200 rounded-xl p-6 flex items-center gap-3 text-red-700">
-          <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+          <AlertTriangle className="w-5 h-5 shrink-0" />
           <p className="text-sm">{error}</p>
         </div>
       ) : (
@@ -359,7 +359,7 @@ export default function AdminUsers() {
                   <div key={user.id} className="grid grid-cols-[2fr_2fr_1.5fr_1fr_1.4fr] gap-4 px-5 py-3.5 items-center hover:bg-gray-50/50 transition-colors">
                     {/* User */}
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0 ${av} ${!user.active ? 'opacity-40' : ''}`}>
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 ${av} ${!user.active ? 'opacity-40' : ''}`}>
                         {getInitials(user.name)}
                       </div>
                       <div className="min-w-0">
@@ -407,7 +407,7 @@ export default function AdminUsers() {
 
                     {/* Last login */}
                     <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                      <Clock className="w-3 h-3 text-gray-300 flex-shrink-0" />
+                      <Clock className="w-3 h-3 text-gray-300 shrink-0" />
                       {user.lastLogin ? formatRelativeTime(user.lastLogin) : 'Nunca'}
                     </div>
 
@@ -477,7 +477,7 @@ export default function AdminUsers() {
           >
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3 min-w-0">
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0 ${avatarColor(pwdTarget.name)}`}>
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 ${avatarColor(pwdTarget.name)}`}>
                   {getInitials(pwdTarget.name)}
                 </div>
                 <div className="min-w-0">
@@ -575,7 +575,7 @@ export default function AdminUsers() {
           >
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-(--brand-pale) text-(--brand) flex-shrink-0">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-(--brand-pale) text-(--brand) shrink-0">
                   <UserPlus className="w-4.5 h-4.5" />
                 </div>
                 <div className="min-w-0">
@@ -705,7 +705,7 @@ export default function AdminUsers() {
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-start gap-3 mb-4">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-red-50 text-red-600 flex-shrink-0">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-red-50 text-red-600 shrink-0">
                 <AlertTriangle className="w-4.5 h-4.5" />
               </div>
               <div className="min-w-0">

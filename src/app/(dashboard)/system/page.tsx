@@ -422,7 +422,7 @@ export default function System() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Audit logs */}
         <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden flex flex-col">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between shrink-0">
             <h2 className="text-sm font-semibold text-gray-800">Registro de auditoría</h2>
             <div className="relative w-44">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
@@ -497,7 +497,7 @@ export default function System() {
                         <button
                           onClick={() => handleConfigSave(key)}
                           disabled={savingConfig === key}
-                          className="flex-shrink-0 px-2 py-1.5 bg-(--brand) text-white rounded-lg text-[10px] font-medium disabled:opacity-50 flex items-center gap-1"
+                          className="shrink-0 px-2 py-1.5 bg-(--brand) text-white rounded-lg text-[10px] font-medium disabled:opacity-50 flex items-center gap-1"
                         >
                           {savingConfig === key ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
                         </button>
@@ -612,7 +612,7 @@ function DetalleVerificacion({ label, info, tone, startupVerified }: {
         <dl className="divide-y divide-gray-100 border-t border-gray-100 pt-1">
           {info.details.map(({ label: k, value }) => (
             <div key={k} className="flex gap-3 py-1">
-              <dt className="text-[11px] text-gray-500 flex-shrink-0 w-[42%]">{k}</dt>
+              <dt className="text-[11px] text-gray-500 shrink-0 w-[42%]">{k}</dt>
               <dd className="text-[11px] text-gray-900 font-medium break-words min-w-0 flex-1">{value}</dd>
             </div>
           ))}
@@ -662,7 +662,7 @@ function StatusCard({ label, icon: Icon, tone, note, verifiedAt, detail, status,
 
   return (
     <div className={`rounded-xl border p-3.5 flex items-start gap-3 ${c.box}`} title={hint}>
-      <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${c.icon}`}>
+      <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${c.icon}`}>
         <Icon className="w-5 h-5" />
       </div>
       <div className="min-w-0 flex-1">
@@ -682,7 +682,7 @@ function StatusCard({ label, icon: Icon, tone, note, verifiedAt, detail, status,
           </p>
         )}
       </div>
-      <ToneIcon className={`w-4 h-4 ${c.chip} flex-shrink-0`} />
+      <ToneIcon className={`w-4 h-4 ${c.chip} shrink-0`} />
     </div>
   );
 }
