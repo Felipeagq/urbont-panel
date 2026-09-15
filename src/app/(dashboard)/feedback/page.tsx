@@ -50,9 +50,9 @@ export default function FeedbackPage() {
       .then(data => setFeedback((data.feedback ?? []).map((f: any) => ({
         id: f.id,
         userId: f.user_id,
-        userName: f.is_anonymous ? 'Anónimo' : (f.user_id || 'Usuario'),
+        userName: f.is_anonymous ? 'Anónimo' : (f.user_name || f.user_id || 'Usuario'),
         driverId: f.chauffeur_id,
-        driverName: f.chauffeur_id || 'N/A',
+        driverName: f.chauffeur_name || f.chauffeur_id || 'N/A',
         rating: f.rating ?? null,
         comment: f.comment ?? '',
         createdAt: f.created_at,
@@ -76,18 +76,26 @@ export default function FeedbackPage() {
     pct: feedbackWithRating.length > 0 ? (feedbackWithRating.filter(f => f.rating === r).length / feedbackWithRating.length) * 100 : 0,
   }));
 
-  // Top rated drivers
-  const driverRatings = Object.values(
-    feedbackWithRating.reduce((acc, f) => {
-      if (!acc[f.driverId]) acc[f.driverId] = { name: f.driverName, total: 0, count: 0 };
-      acc[f.driverId].total += (f.rating as number);
-      acc[f.driverId].count += 1;
-      return acc;
-    }, {} as Record<string, { name: string; total: number; count: number }>)
+  // Top rated drivers. Con pocas reseñas, exigir 3 dejaba la tarjeta vacía: los
+  // que llegan a MIN_RESENAS_TOP van primero (un único 5★ no debe ganarle a un
+  // promedio sostenido) y, detrás, el resto con su número de reseñas a la vista.
+  const MIN_RESENAS_TOP = 3;
+  const driverRatings = Object.entries(
+    feedbackWithRating
+      .filter(f => f.driverId)
+      .reduce((acc, f) => {
+        if (!acc[f.driverId]) acc[f.driverId] = { name: f.driverName, total: 0, count: 0 };
+        acc[f.driverId].total += (f.rating as number);
+        acc[f.driverId].count += 1;
+        return acc;
+      }, {} as Record<string, { name: string; total: number; count: number }>)
   )
-    .map(d => ({ ...d, avg: d.total / d.count }))
-    .filter(d => d.count >= 3)
-    .sort((a, b) => b.avg - a.avg)
+    .map(([id, d]) => ({ id, ...d, avg: d.total / d.count }))
+    .sort((a, b) =>
+      Number(b.count >= MIN_RESENAS_TOP) - Number(a.count >= MIN_RESENAS_TOP)
+      || b.avg - a.avg
+      || b.count - a.count
+    )
     .slice(0, 5);
 
   const filtered = feedback.filter(f => {
@@ -173,7 +181,7 @@ export default function FeedbackPage() {
               ) : (
                 <div className="space-y-2.5">
                   {driverRatings.map((d, i) => (
-                    <div key={d.name} className="flex items-center gap-3">
+                    <div key={d.id} className="flex items-center gap-3">
                       <span className="text-xs font-bold text-gray-400 w-4">{i + 1}</span>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium text-gray-900 truncate">{d.name}</p>
