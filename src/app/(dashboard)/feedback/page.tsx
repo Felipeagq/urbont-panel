@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { adminFetch } from '@/lib/api';
-import { formatDate, formatRelativeTime } from '@/lib/utils';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { formatRelativeTime } from '@/lib/utils';
 import { Star, RefreshCw, Search, TrendingUp, AlertTriangle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -17,6 +16,20 @@ interface FeedbackItem {
   comment: string;
   createdAt: string;
   rideId: string;
+}
+
+/** Fila tal como la devuelve `GET /api/admin/feedback`. */
+interface FeedbackRow {
+  id: string;
+  user_id: string | null;
+  user_name?: string | null;
+  chauffeur_id: string | null;
+  chauffeur_name?: string | null;
+  rating: number | null;
+  comment: string | null;
+  created_at: string;
+  trip_id: string | null;
+  is_anonymous: boolean;
 }
 
 function StarRow({ rating, size = 'sm' }: { rating: number | null; size?: 'sm' | 'lg' }) {
@@ -47,16 +60,16 @@ export default function FeedbackPage() {
   const loadData = useCallback(() => {
     setLoading(true);
     adminFetch('/feedback')
-      .then(data => setFeedback((data.feedback ?? []).map((f: any) => ({
+      .then(data => setFeedback(((data.feedback ?? []) as FeedbackRow[]).map(f => ({
         id: f.id,
-        userId: f.user_id,
+        userId: f.user_id ?? '',
         userName: f.is_anonymous ? 'Anónimo' : (f.user_name || f.user_id || 'Usuario'),
-        driverId: f.chauffeur_id,
+        driverId: f.chauffeur_id ?? '',
         driverName: f.chauffeur_name || f.chauffeur_id || 'N/A',
         rating: f.rating ?? null,
         comment: f.comment ?? '',
         createdAt: f.created_at,
-        rideId: f.trip_id,
+        rideId: f.trip_id ?? '',
       }))))
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));

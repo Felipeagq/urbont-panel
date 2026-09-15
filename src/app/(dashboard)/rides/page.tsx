@@ -108,8 +108,8 @@ export default function Rides() {
       setRefundTarget(null);
       setRefundAmount('');
       loadData();
-    } catch (err: any) {
-      toast.error(err.message || 'Error al procesar el reembolso');
+    } catch (err: unknown) {
+      toast.error((err instanceof Error && err.message) || 'Error al procesar el reembolso');
     } finally {
       setActionLoading(false);
     }
