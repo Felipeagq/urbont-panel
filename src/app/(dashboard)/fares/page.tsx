@@ -4,31 +4,24 @@ import { useState, useEffect, useCallback } from 'react';
 import { adminFetch } from '@/lib/api';
 import {
   DollarSign, RefreshCw, Save, AlertTriangle, Loader2, Info, TrendingUp,
-  Car, CarFront, Truck, type LucideIcon,
+  Car, CarFront, Truck, ShieldCheck, type LucideIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  estimarPorDistancia, estimarPorHora,
+  TIER1_MAX_MILES, TIER2_MAX_MILES,
+  type FareConfig, type PricingPolicy,
+} from '@/lib/fares';
 
 /**
  * Los mismos campos que aplica el motor de cobro (server/config/pricing.ts).
  *
- * Antes esta pantalla editaba once campos, de los cuales cuatro no existían en
- * ningún cálculo: `peakMultiplier`, `airportSurcharge`, `nightSurcharge` y el
- * `perKm` del esquema por kilómetro. Se configuraban, se guardaban, y no se
- * aplicaban nunca.
+ * Con las tarifas del cliente el precio por milla pasó a tres tramos según la
+ * distancia total del viaje, la espera tiene tarifa propia y la reserva sólo la
+ * pagan los viajes programados. `includedMiles`, `perMile` y `cancellationFee`
+ * salen: el servidor ya no los aplica y los rechaza si llegan.
  */
-interface FareConfig {
-  name: string;
-  minFare: number;
-  includedMiles: number;
-  perMile: number;
-  perMin: number;
-  serviceFee: number;
-  cancellationFee: number;
-  perHour: number;
-  minHours: number;
-}
-
 interface FaresData {
   [key: string]: FareConfig;
 }
@@ -43,10 +36,16 @@ type FieldMeta = {
 
 /** Tarifa por distancia — el viaje normal. */
 const DISTANCE_FIELDS: FieldMeta[] = [
-  { key: 'minFare',         label: 'Tarifa mínima',   prefix: '$', desc: 'Cubre las millas incluidas' },
-  { key: 'includedMiles',   label: 'Millas incluidas', suffix: 'mi', desc: 'Cubiertas por la tarifa mínima' },
-  { key: 'perMile',         label: 'Por milla',       prefix: '$', desc: 'A partir de las millas incluidas' },
-  { key: 'perMin',          label: 'Por minuto',      prefix: '$', desc: 'Espera y tráfico' },
+  { key: 'minFare',      label: 'Tarifa mínima',                                 prefix: '$', desc: 'Lo mínimo que cuesta cualquier viaje' },
+  { key: 'perMileTier1', label: `Por milla · viaje de hasta ${TIER1_MAX_MILES} mi`, prefix: '$', desc: 'Se aplica al viaje completo según su distancia total' },
+  { key: 'perMileTier2', label: `Por milla · viaje de ${TIER1_MAX_MILES} a ${TIER2_MAX_MILES} mi`, prefix: '$', desc: 'Se aplica al viaje completo según su distancia total' },
+  { key: 'perMileTier3', label: `Por milla · viaje de más de ${TIER2_MAX_MILES} mi`, prefix: '$', desc: 'Nunca cuesta menos que un viaje de 10 mi' },
+  { key: 'perMin',       label: 'Por minuto de trayecto',                        prefix: '$', desc: 'Tráfico, sobre el 25 % de la duración' },
+];
+
+/** Espera en la recogida. */
+const WAIT_FIELDS: FieldMeta[] = [
+  { key: 'waitPerMin', label: 'Espera por minuto', prefix: '$', desc: 'Tras los minutos gratis, con tope' },
 ];
 
 /** Chofer a disposición — se cobra por bloque de horas, no por distancia. */
@@ -57,12 +56,12 @@ const HOURLY_FIELDS: FieldMeta[] = [
 
 /** Cargos fijos — el recargo por demanda nunca los multiplica. */
 const FEE_FIELDS: FieldMeta[] = [
-  { key: 'serviceFee',      label: 'Cargo de reserva',     prefix: '$', desc: 'Fijo, se suma a todo viaje' },
-  { key: 'cancellationFee', label: 'Cargo por cancelación', prefix: '$', desc: 'Penalización por cancelar tarde' },
+  { key: 'serviceFee', label: 'Reserva', prefix: '$', desc: 'Solo viajes programados; sin recargo' },
 ];
 
 const FIELD_GROUPS: Array<{ title: string; fields: FieldMeta[] }> = [
   { title: 'Tarifa por distancia', fields: DISTANCE_FIELDS },
+  { title: 'Espera',               fields: WAIT_FIELDS },
   { title: 'Tarifa por hora',      fields: HOURLY_FIELDS },
   { title: 'Cargos fijos',         fields: FEE_FIELDS },
 ];
@@ -78,45 +77,22 @@ const CLASS_ICONS: Record<string, LucideIcon> = {
   van:   Truck,     // silueta de furgón
 };
 
-/** Comisión de plataforma. Debe coincidir con PLATFORM_COMMISSION del backend. */
-const PLATFORM_COMMISSION = 0.10;
-/** El backend redondea en cada paso, no sólo al final: el orden cambia el centavo. */
-const r2 = (n: number) => Math.round(n * 100) / 100;
-
-/**
- * Espejo de `calculateFareFromRules` (server/config/pricing.ts), sin recargo.
- *
- * La versión anterior de esta vista previa usaba una fórmula inventada —mezclaba
- * `perKm` con `perMile`, ignoraba las millas incluidas, el factor 0.25 de la
- * espera y la comisión— así que mostraba un número que no se parecía al cobrado.
- * Un operador decide un precio mirando esto.
- */
-function estimarPorDistancia(f: FareConfig, millas: number, minutos: number): number {
-  const millasExtra    = Math.max(0, millas - f.includedMiles);
-  const base           = r2(f.minFare);
-  const distancia      = r2(millasExtra * f.perMile);
-  const espera         = minutos > 0 ? r2(minutos * f.perMin * 0.25) : 0;
-  const reserva        = r2(f.serviceFee);
-  const subtotal       = r2(base + distancia + espera + reserva);
-  return r2(subtotal + r2(subtotal * PLATFORM_COMMISSION));
-}
-
-/** Espejo de `calculateHourlyFare`. Cobra siempre el bloque mínimo. */
-function estimarPorHora(f: FareConfig, horas: number): number {
-  const horasCobradas = Math.max(f.minHours, horas);
-  const cargo         = r2(horasCobradas * f.perHour);
-  const subtotal      = r2(cargo + r2(f.serviceFee));
-  return r2(subtotal + r2(subtotal * PLATFORM_COMMISSION));
-}
+const ESCENARIOS = [
+  { label: 'Corto · 2 mi, 8 min',   miles: 2,  min: 8 },
+  { label: 'Medio · 8 mi, 20 min',  miles: 8,  min: 20 },
+  { label: 'Largo · 20 mi, 45 min', miles: 20, min: 45 },
+];
 
 export default function Fares() {
   const [fares, setFares] = useState<FaresData | null>(null);
   const [original, setOriginal] = useState<FaresData | null>(null);
+  const [policy, setPolicy] = useState<PricingPolicy | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [activeClass, setActiveClass] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [programado, setProgramado] = useState(false);
 
   const loadData = useCallback(() => {
     setLoading(true);
@@ -125,6 +101,7 @@ export default function Fares() {
         const data = res.fares ?? {};
         setFares(data);
         setOriginal(JSON.parse(JSON.stringify(data)));
+        setPolicy(res.pricingPolicy ?? null);
         if (!activeClass && Object.keys(data).length > 0) {
           setActiveClass(Object.keys(data)[0]);
         }
@@ -159,13 +136,8 @@ export default function Fares() {
   /**
    * Guarda cada clase modificada por separado.
    *
-   * Antes esto mandaba el objeto completo (`{ sedan: {...}, suv: {...} }`) pero
-   * el endpoint espera `{ vehicleClass, updates }`: la respuesta era siempre
-   * 400 "Invalid vehicle class". El guardado de esta pantalla nunca funcionó, y
-   * por eso no había ninguna tarifa guardada en la base.
-   *
-   * Una petición por clase, además, deja una entrada de auditoría por clase, que
-   * es como conviene leerlo después.
+   * Una petición por clase deja una entrada de auditoría por clase, que es como
+   * conviene leerlo después. El endpoint espera `{ vehicleClass, updates }`.
    */
   const handleSave = async () => {
     if (!fares) return;
@@ -182,8 +154,8 @@ export default function Fares() {
           method: 'PUT',
           body: JSON.stringify({ vehicleClass: vClass, updates }),
         });
-        // El servidor dice qué campos ignoró. Callarlo sería repetir el problema
-        // que esta pantalla tenía: dar por guardado algo que no se aplicó.
+        // El servidor dice qué campos ignoró. Callarlo sería dar por guardado
+        // algo que no se aplicó.
         for (const campo of res?.rejected ?? []) descartados.add(campo);
       }
 
@@ -339,12 +311,15 @@ export default function Fares() {
               const val = (currentFare as any)[fm.key];
               if (val === undefined) return null;
               const dirty = hasDirtyField(currentClass, fm.key as string);
+              const desc = fm.key === 'waitPerMin' && policy
+                ? `Tras ${policy.wait.freeMinutes} min gratis, con un tope de ${policy.wait.maxBillableMinutes}`
+                : fm.desc;
               return (
                 <div key={fm.key as string}>
                   <label className="block text-xs font-semibold text-gray-500 mb-1">
                     {fm.label}
-                    {fm.desc && (
-                      <span className="ml-1 text-gray-300" title={fm.desc}>
+                    {desc && (
+                      <span className="ml-1 text-gray-300" title={desc}>
                         <Info className="w-3 h-3 inline" />
                       </span>
                     )}
@@ -356,6 +331,7 @@ export default function Fares() {
                     <input
                       type="number"
                       step="0.01"
+                      min="0"
                       className="flex-1 px-3 py-2 text-sm focus:outline-none bg-transparent text-gray-900 font-medium"
                       value={val}
                       onChange={e => handleChange(currentClass, fm.key, e.target.value)}
@@ -364,7 +340,7 @@ export default function Fares() {
                       <span className="px-2.5 text-sm text-gray-400 border-l border-gray-200 bg-gray-50">{fm.suffix}</span>
                     )}
                   </div>
-                  {fm.desc && <p className="text-[10px] text-gray-400 mt-1">{fm.desc}</p>}
+                  {desc && <p className="text-[10px] text-gray-400 mt-1">{desc}</p>}
                 </div>
               );
             })}
@@ -375,19 +351,36 @@ export default function Fares() {
 
           {/* Vista previa — misma fórmula que cobra el servidor */}
           <div className="px-5 py-4 bg-gray-50 border-t border-gray-100">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-1.5">
-              <TrendingUp className="w-3.5 h-3.5" /> Lo que pagaría el pasajero, sin recargo por demanda
-            </p>
+            <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
+                <TrendingUp className="w-3.5 h-3.5" /> Lo que pagaría el pasajero, sin recargo por demanda
+              </p>
+              <div role="group" aria-label="Tipo de viaje" className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5 text-xs">
+                {[
+                  { value: false, label: 'A demanda' },
+                  { value: true,  label: 'Programado' },
+                ].map(opt => (
+                  <button
+                    key={opt.label}
+                    type="button"
+                    aria-pressed={programado === opt.value}
+                    onClick={() => setProgramado(opt.value)}
+                    className={`px-3 py-1 rounded-md font-medium transition-colors ${
+                      programado === opt.value ? 'bg-(--brand) text-white' : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
-              {[
-                { label: 'Corto · 3 mi, 10 min',  miles: 3,  min: 10 },
-                { label: 'Medio · 8 mi, 20 min',  miles: 8,  min: 20 },
-                { label: 'Largo · 20 mi, 45 min', miles: 20, min: 45 },
-              ].map(s => (
+              {ESCENARIOS.map(s => (
                 <div key={s.label} className="bg-white rounded-lg p-3 border border-gray-100">
                   <p className="text-[10px] text-gray-400 mb-1">{s.label}</p>
                   <p className="text-lg font-bold text-gray-900 tabular-nums">
-                    ${estimarPorDistancia(currentFare, s.miles, s.min).toFixed(2)}
+                    ${estimarPorDistancia(currentFare, s.miles, s.min, programado).toFixed(2)}
                   </p>
                 </div>
               ))}
@@ -396,16 +389,69 @@ export default function Fares() {
                   Por hora · {currentFare.minHours} h mínimo
                 </p>
                 <p className="text-lg font-bold text-gray-900 tabular-nums">
-                  ${estimarPorHora(currentFare, currentFare.minHours).toFixed(2)}
+                  ${estimarPorHora(currentFare, currentFare.minHours, programado).toFixed(2)}
                 </p>
               </div>
             </div>
+
+            <div className="mt-3 bg-white rounded-lg px-3 py-2 border border-gray-100 text-xs text-gray-600 flex items-center justify-between gap-3 flex-wrap">
+              <span>Comprobación del salto de tramo · 25 min</span>
+              <span className="tabular-nums">
+                10 mi <b className="text-gray-900">${estimarPorDistancia(currentFare, 10, 25, programado).toFixed(2)}</b>
+                <span className="text-gray-300 mx-2">·</span>
+                11 mi <b className="text-gray-900">${estimarPorDistancia(currentFare, 11, 25, programado).toFixed(2)}</b>
+              </span>
+            </div>
+
             <p className="text-[10px] text-gray-400 mt-3">
-              Incluye el cargo de reserva y la comisión del 10%. En horas de alta demanda
-              el recargo multiplica la tarifa mínima, la distancia y la espera, pero nunca
-              los cargos fijos.
+              Incluye la comisión del 10 %{programado ? ' y la reserva' : ''}. La reserva solo se cobra en viajes
+              programados. En horas de alta demanda el recargo multiplica la tarifa mínima, la distancia y el
+              tiempo, pero nunca la reserva. Un viaje más largo nunca cuesta menos que uno más corto.
             </p>
           </div>
+        </div>
+      )}
+
+      {/* Políticas — publicadas por el backend, se cambian en código */}
+      {policy && (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] px-5 py-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5" /> Políticas de cobro · se cambian en código, no desde esta pantalla
+          </p>
+          <ul className="grid sm:grid-cols-2 gap-x-6 gap-y-2 text-xs text-gray-600">
+            <li>
+              <b className="text-gray-800">Espera:</b> {policy.wait.freeMinutes} min gratis; después se cobra la
+              espera por minuto de la clase, hasta {policy.wait.maxBillableMinutes} min.
+            </li>
+            <li>
+              <b className="text-gray-800">No-show a demanda:</b> tras {policy.noShow.onDemandAfterMinutes} min
+              de espera. Se cobran {policy.noShow.onDemandAfterMinutes - policy.wait.freeMinutes} min de espera
+              más el 10 % del viaje.
+            </li>
+            <li>
+              <b className="text-gray-800">No-show en reserva:</b> {policy.noShow.scheduledAfterMinutes} min
+              después de la hora reservada. Se cobra el 100 % y el chofer recibe su parte.
+            </li>
+            <li>
+              <b className="text-gray-800">Cancelar a demanda:</b>{' '}
+              {policy.onDemandCancellationFee > 0 ? `$${policy.onDemandCancellationFee.toFixed(2)}` : 'gratis'}.
+            </li>
+            <li>
+              <b className="text-gray-800">Cancelar una reserva:</b> gratis con {policy.scheduledCancellation.freeHoursBefore} h
+              o más de antelación · 50 % entre {policy.scheduledCancellation.freeHoursBefore} h
+              y {policy.scheduledCancellation.halfChargeHoursBefore} h · 100 % con menos
+              de {policy.scheduledCancellation.halfChargeHoursBefore} h.
+            </li>
+            <li>
+              <b className="text-gray-800">Recogida lejana:</b> ${policy.longPickupFee.toFixed(2)} si el chofer
+              está a {policy.longPickupThresholdMinutes} min o más.
+            </li>
+            {policy.valetExempt && (
+              <li>
+                <b className="text-gray-800">Viajes de valet:</b> sin cargos de espera, no-show ni cancelación.
+              </li>
+            )}
+          </ul>
         </div>
       )}
     </div>
