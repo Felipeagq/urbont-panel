@@ -25,6 +25,10 @@ interface Ride {
   duration: string | number;
   createdAt: string;
   completedAt?: string;
+  cancelReason?: string | null;
+  // Sólo en cancelados con registro de quién canceló (driver_ride_events).
+  cancelledBy?: 'driver' | 'system';
+  driverCancelReason?: string | null;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; class: string }> = {
@@ -34,6 +38,28 @@ const STATUS_CONFIG: Record<string, { label: string; class: string }> = {
   searching:   { label: 'Buscando',    class: 'bg-amber-50 text-amber-700 border-amber-200' },
   cancelled:   { label: 'Cancelado',   class: 'bg-red-50 text-red-700 border-red-200' },
 };
+
+// Motivos que envían la app del pasajero, la del conductor y el servidor.
+const CANCEL_REASON_LABELS: Record<string, string> = {
+  wrong_pickup:        'Dirección de recogida incorrecta',
+  driver_stopped:      'El conductor se detuvo',
+  vehicle_issue:       'Problema con el vehículo',
+  safety_concern:      'Seguridad',
+  passenger_no_show:   'Pasajero no se presentó',
+  wrong_destination:   'Destino incorrecto',
+  personal_emergency:  'Emergencia personal',
+  other:               'Otro motivo',
+  driver_cancelled:    'Cancelado por el conductor',
+  driver_inactive:     'Conductor inactivo',
+  driver_disconnected: 'Conductor desconectado',
+  passenger_cancelled: 'Cancelado por el pasajero',
+};
+
+function cancelReasonLabel(reason: string): string {
+  return CANCEL_REASON_LABELS[reason] ?? reason.replace(/_/g, ' ');
+}
+
+const CANCELLED_BY_LABELS: Record<string, string> = { driver: 'Conductor', system: 'Sistema' };
 
 const VEHICLE_LABELS: Record<string, string> = {
   businessClass: 'Standard (Sedan)',
@@ -270,8 +296,14 @@ export default function Rides() {
                     </div>
 
                     {/* Status */}
-                    <div>
+                    <div className="min-w-0">
                       <span className={`badge-sm ${st.class}`}>{st.label}</span>
+                      {ride.status === 'cancelled' && (ride.driverCancelReason || ride.cancelReason) && (
+                        <p className="text-[11px] text-gray-400 mt-1 truncate">
+                          {ride.cancelledBy ? `${CANCELLED_BY_LABELS[ride.cancelledBy]}: ` : ''}
+                          {cancelReasonLabel(String(ride.driverCancelReason || ride.cancelReason))}
+                        </p>
+                      )}
                     </div>
 
                     {/* Actions */}
