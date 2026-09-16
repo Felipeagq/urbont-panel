@@ -1,14 +1,24 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { adminFetch } from '@/lib/api';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
 import {
   Headphones, RefreshCw, Search, ChevronDown, ChevronUp,
-  Send, X, AlertTriangle, Loader2, User, Clock, ArrowUp
+  Send, X, AlertTriangle, Loader2, User, Clock, ArrowUp, Siren, Phone, Car,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
+
+/**
+ * Tickets de soporte. Llegan de la pantalla de soporte de la cuenta, del chat de
+ * soporte, de objetos perdidos, de la ayuda del conductor y del botón SOS.
+ *
+ * Hasta el despliegue del 2026-09-16 casi todas esas pantallas fallaban al
+ * enviar, así que esta lista estaba casi vacía. El SOS (categoría `safety` con
+ * prioridad `urgent`) se destaca: además del ticket, queda como incidente
+ * crítico en la pantalla de Incidentes.
+ */
 
 interface Reply {
   author: string;
@@ -16,32 +26,58 @@ interface Reply {
   createdAt: string;
 }
 
+type Status = 'open' | 'in_progress' | 'closed';
+type Priority = 'critical' | 'high' | 'medium' | 'low';
+
 interface Ticket {
   id: string;
   userId: string;
   userName: string;
-  userType: 'passenger' | 'driver' | 'other';
+  userType: string;
+  userPhone: string | null;
+  rideId: string | null;
+  category: string;
   subject: string;
   message: string;
-  status: 'open' | 'in_progress' | 'closed';
-  priority: 'critical' | 'high' | 'medium' | 'low';
+  status: Status;
+  priority: Priority;
   createdAt: string;
   replies: Reply[];
   assignedTo?: string;
 }
 
-const STATUS_CONFIG = {
+const STATUS_CONFIG: Record<Status, { label: string; class: string }> = {
   open:        { label: 'Abierto',     class: 'bg-blue-50 text-blue-700 border-blue-200' },
   in_progress: { label: 'En proceso',  class: 'bg-amber-50 text-amber-700 border-amber-200' },
   closed:      { label: 'Cerrado',     class: 'bg-gray-100 text-gray-600 border-gray-200' },
 };
 
-const PRIORITY_CONFIG = {
+const PRIORITY_CONFIG: Record<Priority, { label: string; class: string }> = {
   critical: { label: 'Crítico', class: 'bg-red-600 text-white' },
   high:     { label: 'Alto',    class: 'bg-orange-100 text-orange-700' },
   medium:   { label: 'Medio',   class: 'bg-amber-100 text-amber-700' },
   low:      { label: 'Bajo',    class: 'bg-gray-100 text-gray-600' },
 };
+
+/** Las categorías que guarda el backend (server/services/supportTicket.ts). */
+const CATEGORY_LABELS: Record<string, string> = {
+  lost_item:           'Objeto perdido',
+  driver_issue:        'Problema con el conductor',
+  billing:             'Pagos',
+  app_issue:           'Problema de la app',
+  safety:              'Seguridad',
+  roadside_assistance: 'Asistencia en carretera',
+  support_chat:        'Chat de soporte',
+  other:               'Otro',
+};
+
+const USER_TYPE_LABELS: Record<string, string> = {
+  passenger: 'pasajero',
+  driver: 'conductor',
+  other: 'otro',
+};
+
+const categoryLabel = (c: string) => CATEGORY_LABELS[c] ?? c.replace(/_/g, ' ');
 
 export default function Support() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -51,29 +87,36 @@ export default function Support() {
   const [replyText, setReplyText] = useState<Record<string, string>>({});
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | Ticket['status']>('all');
-  const [priorityFilter, setPriorityFilter] = useState<'all' | Ticket['priority']>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | Status>('all');
+  const [priorityFilter, setPriorityFilter] = useState<'all' | Priority>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
   const loadData = useCallback(() => {
     setLoading(true);
     adminFetch('/support')
-      .then(data => setTickets((data.tickets ?? []).map((t: any) => ({
-        id: t.id,
-        userId: t.userId,
-        userName: t.userName ?? 'Usuario',
-        userType: t.userType ?? 'passenger',
-        subject: t.subject ?? '(sin asunto)',
-        message: t.description ?? '',
-        status: t.status ?? 'open',
-        priority: t.priority === 'urgent' ? 'critical' : t.priority === 'normal' ? 'medium' : (t.priority ?? 'medium'),
-        createdAt: t.createdAt,
-        replies: Array.isArray(t.messages) ? t.messages.map((m: any) => ({
-          author: m.sender ?? (m.isAdmin ? 'Admin' : 'Usuario'),
-          message: m.content ?? '',
-          createdAt: m.timestamp,
-        })) : [],
-        assignedTo: t.assignedTo,
-      }))))
+      .then(data => {
+        setTickets((data.tickets ?? []).map((t: any) => ({
+          id: t.id,
+          userId: t.userId,
+          userName: t.userName ?? 'Usuario',
+          userType: t.userType ?? 'passenger',
+          userPhone: t.userPhone && t.userPhone !== 'N/A' ? t.userPhone : null,
+          rideId: t.rideId ?? null,
+          category: t.category ?? 'other',
+          subject: t.subject || '(sin asunto)',
+          message: t.description ?? '',
+          status: t.status ?? 'open',
+          priority: t.priority === 'urgent' ? 'critical' : t.priority === 'normal' ? 'medium' : (t.priority ?? 'medium'),
+          createdAt: t.createdAt,
+          replies: Array.isArray(t.messages) ? t.messages.map((m: any) => ({
+            author: m.sender ?? (m.isAdmin ? 'Admin' : 'Usuario'),
+            message: m.content ?? '',
+            createdAt: m.timestamp,
+          })) : [],
+          assignedTo: t.assignedTo,
+        })));
+        setError(null);
+      })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
@@ -112,12 +155,21 @@ export default function Support() {
     }
   };
 
+  const esSOS = (t: Ticket) => t.category === 'safety' && t.priority === 'critical';
+
+  const categoriasPresentes = useMemo(
+    () => [...new Set(tickets.map(t => t.category))].sort((a, b) => categoryLabel(a).localeCompare(categoryLabel(b))),
+    [tickets],
+  );
+
   const filtered = tickets.filter(t => {
-    const q = search.toLowerCase();
-    const matchSearch = t.subject.toLowerCase().includes(q) || t.userName.toLowerCase().includes(q) || t.message.toLowerCase().includes(q);
+    const q = search.trim().toLowerCase();
+    const matchSearch = !q || [t.subject, t.userName, t.message, categoryLabel(t.category), t.rideId ?? '']
+      .some(v => v.toLowerCase().includes(q));
     const matchStatus = statusFilter === 'all' || t.status === statusFilter;
     const matchPriority = priorityFilter === 'all' || t.priority === priorityFilter;
-    return matchSearch && matchStatus && matchPriority;
+    const matchCategory = categoryFilter === 'all' || t.category === categoryFilter;
+    return matchSearch && matchStatus && matchPriority && matchCategory;
   });
 
   const counts = {
@@ -126,6 +178,8 @@ export default function Support() {
     in_progress: tickets.filter(t => t.status === 'in_progress').length,
     closed: tickets.filter(t => t.status === 'closed').length,
   };
+
+  const sosAbiertos = tickets.filter(t => esSOS(t) && t.status !== 'closed').length;
 
   return (
     <div className="space-y-5">
@@ -140,9 +194,22 @@ export default function Support() {
         </button>
       </div>
 
+      {sosAbiertos > 0 && (
+        <button
+          onClick={() => { setCategoryFilter('safety'); setPriorityFilter('critical'); setStatusFilter('all'); }}
+          className="w-full text-left bg-red-600 text-white rounded-xl px-4 py-3 flex items-center gap-3 hover:bg-red-700 transition-colors"
+        >
+          <Siren className="w-5 h-5 shrink-0" />
+          <span className="text-sm font-semibold">
+            {sosAbiertos === 1 ? '1 SOS de emergencia sin cerrar' : `${sosAbiertos} SOS de emergencia sin cerrar`}
+          </span>
+          <span className="ml-auto text-xs text-white/80">Ver</span>
+        </button>
+      )}
+
       {/* Filters */}
       <div className="flex gap-3 flex-wrap items-center">
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {(['all', 'open', 'in_progress', 'closed'] as const).map(s => (
             <button
               key={s}
@@ -159,8 +226,16 @@ export default function Support() {
           ))}
         </div>
         <select
+          value={categoryFilter}
+          onChange={e => setCategoryFilter(e.target.value)}
+          className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-(--brand)/30"
+        >
+          <option value="all">Toda categoría</option>
+          {categoriasPresentes.map(c => <option key={c} value={c}>{categoryLabel(c)}</option>)}
+        </select>
+        <select
           value={priorityFilter}
-          onChange={e => setPriorityFilter(e.target.value as any)}
+          onChange={e => setPriorityFilter(e.target.value as 'all' | Priority)}
           className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-(--brand)/30"
         >
           <option value="all">Toda prioridad</option>
@@ -169,7 +244,7 @@ export default function Support() {
           <option value="medium">Medio</option>
           <option value="low">Bajo</option>
         </select>
-        <div className="relative flex-1 max-w-xs">
+        <div className="relative flex-1 min-w-[180px] max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
           <input
             type="search"
@@ -210,31 +285,50 @@ export default function Support() {
           {filtered.map(ticket => {
             const st = STATUS_CONFIG[ticket.status] ?? STATUS_CONFIG.open;
             const pr = PRIORITY_CONFIG[ticket.priority] ?? PRIORITY_CONFIG.medium;
+            const sos = esSOS(ticket);
             const isExpanded = expandedId === ticket.id;
 
             return (
-              <div key={ticket.id} className="bg-white rounded-xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden">
+              <div
+                key={ticket.id}
+                className={`bg-white rounded-xl border shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden ${
+                  sos && ticket.status !== 'closed' ? 'border-red-300' : 'border-gray-100'
+                }`}
+              >
                 {/* Ticket header */}
                 <div
-                  className="p-4 flex items-start gap-3 cursor-pointer hover:bg-gray-50/50 transition-colors"
+                  className={`p-4 flex items-start gap-3 cursor-pointer transition-colors ${
+                    sos && ticket.status !== 'closed' ? 'bg-red-50/60 hover:bg-red-50' : 'hover:bg-gray-50/50'
+                  }`}
                   onClick={() => setExpandedId(isExpanded ? null : ticket.id)}
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
+                      {sos && (
+                        <span className="badge-sm bg-red-600 text-white flex items-center gap-1">
+                          <Siren className="w-3 h-3" /> SOS
+                        </span>
+                      )}
                       <h3 className="text-sm font-semibold text-gray-900">{ticket.subject}</h3>
                       <span className={`badge-sm ${pr.class}`}>{pr.label}</span>
                       <span className={`badge-sm ${st.class}`}>{st.label}</span>
+                      <span className="badge-sm bg-gray-50 text-gray-500 border border-gray-200">{categoryLabel(ticket.category)}</span>
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-gray-500">
+                    <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
                       <span className="flex items-center gap-1">
                         <User className="w-3 h-3" />
                         {ticket.userName}
-                        <span className="text-gray-300">({ticket.userType})</span>
+                        <span className="text-gray-300">({USER_TYPE_LABELS[ticket.userType] ?? ticket.userType})</span>
                       </span>
                       <span className="flex items-center gap-1">
                         <Clock className="w-3 h-3" />
                         {formatRelativeTime(ticket.createdAt)}
                       </span>
+                      {ticket.rideId && (
+                        <span className="flex items-center gap-1 font-mono text-gray-400" title={ticket.rideId}>
+                          <Car className="w-3 h-3" /> {ticket.rideId.slice(0, 8)}
+                        </span>
+                      )}
                       {ticket.replies.length > 0 && (
                         <span className="text-(--brand)">{ticket.replies.length} respuestas</span>
                       )}
@@ -248,6 +342,24 @@ export default function Support() {
                 {/* Expanded conversation */}
                 {isExpanded && (
                   <div className="border-t border-gray-100">
+                    {(ticket.userPhone || ticket.rideId) && (
+                      <div className="px-4 pt-3 flex items-center gap-4 flex-wrap text-xs">
+                        {ticket.userPhone && (
+                          <a href={`tel:${ticket.userPhone}`} className="flex items-center gap-1.5 text-(--brand) font-medium hover:underline">
+                            <Phone className="w-3.5 h-3.5" /> Llamar a {ticket.userPhone}
+                          </a>
+                        )}
+                        {ticket.rideId && (
+                          <span className="text-gray-500">
+                            Viaje <span className="font-mono text-gray-700 break-all">{ticket.rideId}</span>
+                          </span>
+                        )}
+                        {sos && (
+                          <span className="text-red-600">También registrado en Incidentes como crítico.</span>
+                        )}
+                      </div>
+                    )}
+
                     {/* Original message */}
                     <div className="p-4 bg-gray-50/60">
                       <div className="bg-white border border-gray-100 rounded-xl p-3.5 shadow-sm">
