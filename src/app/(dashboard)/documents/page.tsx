@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { adminFetch } from '@/lib/api';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
 import {
   FileText, CheckCircle2, XCircle, RefreshCw, AlertTriangle,
   Search, Clock, User, ExternalLink, Loader2, Eye, RotateCcw,
-  ChevronDown, ChevronUp, Users, LayoutGrid
+  ChevronDown, ChevronUp, Users, LayoutGrid, Settings2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -359,9 +360,14 @@ export default function Documents() {
             {counts.pending} pendientes de revisión · {counts.approved} aprobados · {counts.rejected} rechazados
           </p>
         </div>
-        <button onClick={loadData} className="btn-outline flex items-center gap-2 text-xs">
-          <RefreshCw className="w-3.5 h-3.5" /> Actualizar
-        </button>
+        <div className="flex gap-2">
+          <Link href="/documents/catalog" className="btn-outline flex items-center gap-2 text-xs">
+            <Settings2 className="w-3.5 h-3.5" /> Catálogo
+          </Link>
+          <button onClick={loadData} className="btn-outline flex items-center gap-2 text-xs">
+            <RefreshCw className="w-3.5 h-3.5" /> Actualizar
+          </button>
+        </div>
       </div>
 
       {/* Alert banner for pending */}
