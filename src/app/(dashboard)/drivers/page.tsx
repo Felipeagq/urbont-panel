@@ -5,7 +5,7 @@ import { adminFetch } from '@/lib/api';
 import { formatDate, actionTookEffect, formatUrbontId, normalizarIdBusqueda } from '@/lib/utils';
 import {
   Search, Car, Star, Shield, CheckCircle2,
-  Phone, ChevronDown, ChevronUp, RefreshCw, UserX, AlertTriangle, Hash, ExternalLink, Loader2
+  Phone, ChevronDown, ChevronUp, RefreshCw, UserX, AlertTriangle, Hash, ExternalLink, Loader2, CreditCard
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -59,6 +59,10 @@ interface Driver {
 
   // Banderas de inconsistencia para auditar
   verificationMismatch: boolean;
+  /** Estado de su cuenta de Stripe: sin ella, un viaje suyo no le transfiere nada. */
+  stripeConnectStatus?: string;
+  stripeAccountId?: string | null;
+  canReceivePayouts?: boolean;
   approvedWithoutVehicle: boolean;
   roleMismatch: boolean;
 
@@ -187,6 +191,24 @@ export default function Drivers() {
       }
     } catch (err: any) {
       toast.error(err.message || 'No se pudo recalcular la verificación');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  /**
+   * `stripe_connect_status` se escribe al iniciar el alta y se queda en
+   * 'pending' aunque el chofer la termine, así que el panel lo pregunta.
+   */
+  const verificarStripe = async (id: string) => {
+    setActionLoading(`${id}-stripe`);
+    try {
+      const r = await adminFetch(`/drivers/${id}/stripe-status`, { method: 'POST' });
+      await loadData();
+      if (r.canReceivePayouts) toast.success('Cuenta de Stripe lista: puede recibir pagos');
+      else toast.warning(r.reason || 'La cuenta de Stripe no está lista');
+    } catch (err: any) {
+      toast.error(err.message || 'No se pudo consultar Stripe');
     } finally {
       setActionLoading(null);
     }
@@ -381,8 +403,28 @@ export default function Drivers() {
                       </div>
 
                       {/* Status badge */}
-                      <div>
+                      <div className="space-y-1">
                         <span className={`badge-sm ${st.class}`}>{st.label}</span>
+                        {/* Pagos: sin cuenta de Stripe, un viaje suyo no le transfiere nada. */}
+                        <span
+                          className={`badge-sm flex items-center gap-1 w-fit ${
+                            driver.canReceivePayouts
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : driver.stripeAccountId
+                                ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                : 'bg-gray-100 text-gray-500 border border-gray-200'
+                          }`}
+                          title={
+                            driver.canReceivePayouts
+                              ? 'Cuenta de Stripe lista: recibe su parte de cada viaje'
+                              : driver.stripeAccountId
+                                ? 'Empezó el alta de Stripe pero no la terminó: todavía no cobra'
+                                : 'No ha iniciado el alta de Stripe: no puede cobrar'
+                          }
+                        >
+                          <CreditCard className="w-3 h-3" />
+                          {driver.canReceivePayouts ? 'Stripe listo' : driver.stripeAccountId ? 'Stripe a medias' : 'Sin Stripe'}
+                        </span>
                       </div>
 
                       {/* Expand */}
@@ -408,6 +450,12 @@ export default function Drivers() {
                           <div className="flex items-center gap-2 text-sm text-gray-600">
                             <Shield className="w-3.5 h-3.5 text-gray-400" />
                             Documentos: {driver.documentsState || '—'} ({driver.documentsApproved}/{driver.documentsTotal})
+                          </div>
+                          <div className="flex items-center gap-2 text-sm text-gray-600">
+                            <CreditCard className="w-3.5 h-3.5 text-gray-400" />
+                            Pagos: {driver.canReceivePayouts
+                              ? 'Stripe listo'
+                              : driver.stripeAccountId ? 'Stripe a medias' : 'sin Stripe'}
                           </div>
                           <div className="flex items-center gap-2 text-sm text-gray-400 text-xs">
                             Registro: {formatDate(driver.createdAt)}
@@ -439,6 +487,29 @@ export default function Drivers() {
                                 ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                                 : <RefreshCw className="w-3.5 h-3.5" />}
                               Recalcular verificación
+                            </button>
+                          </div>
+                        )}
+                        {driver.stripeConnectStatus !== 'active' && (
+                          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800 flex items-center gap-3 flex-wrap">
+                            <span className="flex-1 min-w-[240px]">
+                              <CreditCard className="w-4 h-4 inline mr-2" />
+                              {driver.stripeAccountId
+                                ? 'Alta de Stripe a medias: todavía no puede recibir pagos'
+                                : 'Sin cuenta de Stripe: no puede recibir pagos'}
+                              <span className="block text-xs text-blue-600 mt-0.5 ml-6">
+                                Lo que cobre el pasajero se queda íntegro en la cuenta de Urbont hasta que complete el alta.
+                              </span>
+                            </span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); verificarStripe(driver.id); }}
+                              disabled={!!actionLoading}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-blue-300 text-blue-800 rounded-lg text-xs font-medium hover:bg-blue-100 transition-colors disabled:opacity-50"
+                            >
+                              {actionLoading === `${driver.id}-stripe`
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                : <RefreshCw className="w-3.5 h-3.5" />}
+                              Verificar en Stripe
                             </button>
                           </div>
                         )}
