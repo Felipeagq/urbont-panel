@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { adminFetch } from '@/lib/api';
 import {
   DollarSign, RefreshCw, Save, AlertTriangle, Loader2, Info, TrendingUp,
-  Car, CarFront, Truck, ShieldCheck, type LucideIcon,
+  Car, CarFront, Truck, ShieldCheck, Percent, type LucideIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -93,6 +93,11 @@ export default function Fares() {
   const [activeClass, setActiveClass] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [programado, setProgramado] = useState(false);
+  // Tasa de respaldo del impuesto: la que se usa cuando Stripe Tax no responde
+  // o no cubre el país. La tasa real de cada viaje la calcula Stripe.
+  const [taxRate, setTaxRate] = useState<number | null>(null);
+  const [taxDraft, setTaxDraft] = useState('');
+  const [savingTax, setSavingTax] = useState(false);
 
   const loadData = useCallback(() => {
     setLoading(true);
@@ -102,6 +107,9 @@ export default function Fares() {
         setFares(data);
         setOriginal(JSON.parse(JSON.stringify(data)));
         setPolicy(res.pricingPolicy ?? null);
+        const tasa = typeof res.taxFallbackRatePercent === 'number' ? res.taxFallbackRatePercent : null;
+        setTaxRate(tasa);
+        setTaxDraft(tasa != null ? String(tasa) : '');
         if (!activeClass && Object.keys(data).length > 0) {
           setActiveClass(Object.keys(data)[0]);
         }
@@ -411,6 +419,61 @@ export default function Fares() {
           </div>
         </div>
       )}
+
+      {/* Impuesto — tasa de respaldo, editable */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 space-y-3">
+        <div className="flex items-center gap-2">
+          <Percent className="w-4 h-4 text-(--brand)" />
+          <h2 className="text-sm font-bold text-gray-900">Impuesto de venta</h2>
+        </div>
+        <p className="text-xs text-gray-500 leading-relaxed">
+          La tasa real de cada viaje la calcula Stripe según el condado, y no se configura aquí: es dinero
+          del estado. Esta tasa de respaldo sólo se aplica cuando Stripe no responde o no cubre el país,
+          y es la que estima el impuesto de los viajes que nunca se cobraron.
+        </p>
+        <div className="flex items-end gap-3 flex-wrap">
+          <label className="text-xs text-gray-500 space-y-1">
+            <span>Tasa de respaldo (%)</span>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              max="30"
+              value={taxDraft}
+              onChange={e => setTaxDraft(e.target.value)}
+              className="block w-32 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--brand)/30"
+            />
+          </label>
+          <button
+            onClick={async () => {
+              setSavingTax(true);
+              try {
+                const r = await adminFetch('/fares/tax', {
+                  method: 'PUT',
+                  body: JSON.stringify({ fallbackRatePercent: Number(taxDraft) }),
+                });
+                setTaxRate(r.taxFallbackRatePercent);
+                setTaxDraft(String(r.taxFallbackRatePercent));
+                toast.success(`Tasa de respaldo guardada: ${r.taxFallbackRatePercent}%`);
+              } catch (err: any) {
+                toast.error(err.message || 'No se pudo guardar la tasa');
+              } finally {
+                setSavingTax(false);
+              }
+            }}
+            disabled={savingTax || taxDraft.trim() === '' || Number(taxDraft) === taxRate}
+            className="btn-primary flex items-center gap-2 text-xs disabled:opacity-50"
+          >
+            {savingTax ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            Guardar tasa
+          </button>
+          {taxRate != null && (
+            <p className="text-xs text-gray-400">
+              En un viaje de $22,00 serían ${(22 * taxRate / 100).toFixed(2)} de impuesto.
+            </p>
+          )}
+        </div>
+      </div>
 
       {/* Políticas — publicadas por el backend, se cambian en código */}
       {policy && (
