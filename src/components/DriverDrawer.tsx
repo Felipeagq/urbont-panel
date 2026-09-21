@@ -2,12 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { adminFetch } from '@/lib/api';
-import { formatDate, formatRelativeTime, actionTookEffect } from '@/lib/utils';
+import { formatDate, formatRelativeTime, actionTookEffect, formatUrbontId } from '@/lib/utils';
 import {
   X, Phone, Mail, Star, MapPin, Calendar, Car, Shield, ShieldCheck,
   UserX, UserCheck, Ban, MessageSquare, Loader2, ChevronRight,
   DollarSign, Clock, Hash, FileText, AlertTriangle, ExternalLink,
-  CheckCircle2, RefreshCw
+  CheckCircle2, RefreshCw, Copy
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -312,6 +312,18 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
             <div className="space-y-6">
               <div className="space-y-2.5">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Contacto</p>
+                <button
+                  onClick={() => {
+                    navigator.clipboard?.writeText(formatUrbontId(driver.id));
+                    toast.success('Driver ID copiado');
+                  }}
+                  className="flex items-center gap-3 text-sm text-gray-700 hover:text-(--brand) transition-colors w-full text-left"
+                  title="Copiar el Driver ID"
+                >
+                  <Hash className="w-4 h-4 text-gray-400 shrink-0" />
+                  <span className="font-mono">{formatUrbontId(driver.id)}</span>
+                  <Copy className="w-3.5 h-3.5 text-gray-300" />
+                </button>
                 {[
                   { icon: Mail, label: driver.email },
                   { icon: Phone, label: driver.phone || '—' },

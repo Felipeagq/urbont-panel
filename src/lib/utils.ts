@@ -48,3 +48,20 @@ export function actionTookEffect<T extends { id: string }, K extends keyof T>(
   if (!fresh) return { found: false, changed: false };
   return { found: true, changed: fresh[field] === expectedValue };
 }
+
+/**
+ * El «Driver ID» que la app le muestra al conductor en su cuenta: los primeros
+ * ocho caracteres de su UUID, en mayúsculas. Es el mismo formato que
+ * `UrbontIdBadge.formatUrbontId` en la app, así que lo que el conductor lee por
+ * teléfono se puede pegar tal cual en el buscador del panel.
+ */
+export function formatUrbontId(uuid: string | null | undefined): string {
+  const clean = String(uuid ?? '').replace(/-/g, '').toUpperCase().slice(0, 8);
+  if (clean.length < 8) return '—';
+  return `URB-${clean.slice(0, 4)}-${clean.slice(4, 8)}`;
+}
+
+/** Para buscar: «URB-B50D-4430», «b50d4430» y el UUID entero valen igual. */
+export function normalizarIdBusqueda(valor: string): string {
+  return valor.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().replace(/^URB/, '');
+}

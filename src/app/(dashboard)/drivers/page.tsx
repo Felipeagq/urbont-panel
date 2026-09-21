@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { adminFetch } from '@/lib/api';
-import { formatDate, actionTookEffect } from '@/lib/utils';
+import { formatDate, actionTookEffect, formatUrbontId, normalizarIdBusqueda } from '@/lib/utils';
 import {
   Search, Car, Star, Shield, CheckCircle2,
-  Phone, ChevronDown, ChevronUp, RefreshCw, UserX, AlertTriangle, Hash, ExternalLink
+  Phone, ChevronDown, ChevronUp, RefreshCw, UserX, AlertTriangle, Hash, ExternalLink, Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -168,6 +168,30 @@ export default function Drivers() {
     reactivate: 'active',
   };
 
+  /**
+   * `verification_status` sólo se recalculaba al subir o revisar un documento,
+   * así que un conductor con todo aprobado por otra vía se quedaba con el
+   * estado viejo y el aviso de «no coincide» no tenía forma de resolverse.
+   */
+  const recalcularVerificacion = async (id: string) => {
+    setActionLoading(`${id}-recalculate`);
+    try {
+      const r = await adminFetch(`/drivers/${id}/recalculate-verification`, { method: 'POST' });
+      await loadData();
+      if (r.changed) {
+        toast.success(`Verificación actualizada: ${r.previousStatus ?? '—'} → ${r.status}`);
+      } else if (r.missingDocs?.length) {
+        toast.warning(`Sigue en ${r.status}: faltan ${r.missingDocs.length} documentos (${r.missingDocs.slice(0, 3).join(', ')}…)`);
+      } else {
+        toast.info(`Sin cambios: sigue en ${r.status}${r.reason ? ` · ${r.reason}` : ''}`);
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'No se pudo recalcular la verificación');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const doAction = async (id: string, action: string, body?: object) => {
     setActionLoading(`${id}-${action}`);
     try {
@@ -201,7 +225,11 @@ export default function Drivers() {
 
   const filtered = drivers.filter(d => {
     const q = search.toLowerCase();
-    const matchSearch = d.name.toLowerCase().includes(q) || d.email.toLowerCase().includes(q) || d.phone.includes(q) || d.plate?.toLowerCase().includes(q);
+    // El Driver ID se busca sin guiones ni prefijo: el conductor lo dicta como
+    // «URB-B50D-4430» y en el panel se puede pegar así, suelto o con el UUID.
+    const qId = normalizarIdBusqueda(search);
+    const matchId = qId.length >= 3 && normalizarIdBusqueda(d.id).startsWith(qId);
+    const matchSearch = matchId || d.name.toLowerCase().includes(q) || d.email.toLowerCase().includes(q) || d.phone.includes(q) || d.plate?.toLowerCase().includes(q);
     const matchStatus = statusFilter === 'all' || d.status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -253,7 +281,7 @@ export default function Drivers() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
         <input
           type="search"
-          placeholder="Buscar por nombre, email, placa..."
+          placeholder="Buscar por nombre, email, placa o Driver ID..."
           value={search}
           onChange={e => setSearch(e.target.value)}
           data-testid="input-search-drivers"
@@ -318,6 +346,12 @@ export default function Drivers() {
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-gray-900 truncate">{driver.name}</p>
                           <p className="text-xs text-gray-400 truncate">{driver.email}</p>
+                          <p
+                            className="text-[11px] font-mono text-gray-400 truncate"
+                            title="Driver ID — el mismo que el conductor ve en su cuenta"
+                          >
+                            {formatUrbontId(driver.id)}
+                          </p>
                         </div>
                       </div>
 
@@ -388,9 +422,24 @@ export default function Drivers() {
 
                         {/* Banderas de inconsistencia */}
                         {driver.verificationMismatch && (
-                          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
-                            <AlertTriangle className="w-4 h-4 inline mr-2" />
-                            El estado de documentos no coincide con verificación
+                          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700 flex items-center gap-3 flex-wrap">
+                            <span className="flex-1 min-w-[240px]">
+                              <AlertTriangle className="w-4 h-4 inline mr-2" />
+                              El estado de documentos no coincide con verificación
+                              <span className="block text-xs text-amber-600 mt-0.5 ml-6">
+                                Documentos: {driver.documentsState} ({driver.documentsApproved}/{driver.documentsTotal}) · Verificación: {driver.verificationStatus}
+                              </span>
+                            </span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); recalcularVerificacion(driver.id); }}
+                              disabled={!!actionLoading}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-amber-300 text-amber-800 rounded-lg text-xs font-medium hover:bg-amber-100 transition-colors disabled:opacity-50"
+                            >
+                              {actionLoading === `${driver.id}-recalculate`
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                : <RefreshCw className="w-3.5 h-3.5" />}
+                              Recalcular verificación
+                            </button>
                           </div>
                         )}
                         {driver.approvedWithoutVehicle && (
