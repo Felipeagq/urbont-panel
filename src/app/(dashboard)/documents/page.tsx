@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { adminFetch } from '@/lib/api';
-import { formatDate, formatRelativeTime } from '@/lib/utils';
+import { formatDate, formatRelativeTime, formatUrbontId } from '@/lib/utils';
 import {
   FileText, CheckCircle2, XCircle, RefreshCw, AlertTriangle,
   Search, Clock, User, ExternalLink, Loader2, Eye, RotateCcw,
@@ -77,6 +77,8 @@ function getInitials(name: string) {
 interface DriverGroup {
   key: string;
   driverName: string;
+  /** Para identificarlo aunque no tenga nombre: el mismo id que ve en su cuenta. */
+  driverId: string;
   docs: Document[];
   pending: number;
   approved: number;
@@ -94,7 +96,12 @@ function groupByDriver(docs: Document[]): DriverGroup[] {
     const key = d.driverId || d.driverName || 'sin-conductor';
     let g = map.get(key);
     if (!g) {
-      g = { key, driverName: d.driverName || 'Sin conductor', docs: [], pending: 0, approved: 0, rejected: 0 };
+      g = {
+        key,
+        driverName: d.driverName || 'Conductor sin nombre',
+        driverId: d.driverId || '',
+        docs: [], pending: 0, approved: 0, rejected: 0,
+      };
       map.set(key, g);
     }
     g.docs.push(d);
@@ -499,7 +506,14 @@ export default function Documents() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-900 truncate">{g.driverName}</p>
-                    <p className="text-xs text-gray-400">{g.docs.length} {g.docs.length === 1 ? 'documento' : 'documentos'}</p>
+                    <p className="text-xs text-gray-400">
+                      {g.docs.length} {g.docs.length === 1 ? 'documento' : 'documentos'}
+                      {g.driverId && (
+                        // El Driver ID sirve para cruzarlo con Conductores y con
+                        // lo que el propio conductor ve en su cuenta.
+                        <span className="font-mono ml-2" title="Driver ID">{formatUrbontId(g.driverId)}</span>
+                      )}
+                    </p>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     {g.pending > 0 && (
