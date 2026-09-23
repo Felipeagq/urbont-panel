@@ -59,11 +59,19 @@ const FEE_FIELDS: FieldMeta[] = [
   { key: 'serviceFee', label: 'Reserva', prefix: '$', desc: 'Solo viajes programados; sin recargo' },
 ];
 
-const FIELD_GROUPS: Array<{ title: string; fields: FieldMeta[] }> = [
-  { title: 'Tarifa por distancia', fields: DISTANCE_FIELDS },
-  { title: 'Espera',               fields: WAIT_FIELDS },
-  { title: 'Tarifa por hora',      fields: HOURLY_FIELDS },
-  { title: 'Cargos fijos',         fields: FEE_FIELDS },
+/**
+ * Cómo se reparten los grupos en el ancho de la tarjeta.
+ *
+ * Antes cada grupo ocupaba su propia fila de cuatro columnas, así que los de un
+ * solo campo —espera y cargos fijos— dejaban tres huecos vacíos cada uno. Ahora
+ * la distancia, que son cinco campos, llena una fila entera, y los tres cortos
+ * comparten la siguiente.
+ */
+const GRUPO_DISTANCIA = { title: 'Tarifa por distancia', fields: DISTANCE_FIELDS };
+const GRUPOS_CORTOS: Array<{ title: string; fields: FieldMeta[] }> = [
+  { title: 'Espera',          fields: WAIT_FIELDS },
+  { title: 'Tarifa por hora', fields: HOURLY_FIELDS },
+  { title: 'Cargos fijos',    fields: FEE_FIELDS },
 ];
 
 /**
@@ -317,52 +325,72 @@ export default function Fares() {
           </div>
 
           <div className="p-5 flex flex-col gap-6">
-            {FIELD_GROUPS.map(group => (
-              <div key={group.title}>
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">
-                  {group.title}
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
-            {group.fields.map(fm => {
-              const val = (currentFare as any)[fm.key];
-              if (val === undefined) return null;
-              const dirty = hasDirtyField(currentClass, fm.key as string);
-              const desc = fm.key === 'waitPerMin' && policy
-                ? `Tras ${policy.wait.freeMinutes} min gratis, con un tope de ${policy.wait.maxBillableMinutes}`
-                : fm.desc;
-              return (
-                <div key={fm.key as string}>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1">
-                    {fm.label}
-                    {desc && (
-                      <span className="ml-1 text-gray-300" title={desc}>
-                        <Info className="w-3 h-3 inline" />
-                      </span>
-                    )}
-                  </label>
-                  <div className={`flex items-center border rounded-lg overflow-hidden transition-colors ${dirty ? 'border-amber-400 bg-amber-50/20' : 'border-gray-200'}`}>
-                    {fm.prefix && (
-                      <span className="px-2.5 text-sm text-gray-400 border-r border-gray-200 bg-gray-50">{fm.prefix}</span>
-                    )}
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      className="flex-1 px-3 py-2 text-sm focus:outline-none bg-transparent text-gray-900 font-medium"
-                      value={val}
-                      onChange={e => handleChange(currentClass, fm.key, e.target.value)}
-                    />
-                    {fm.suffix && (
-                      <span className="px-2.5 text-sm text-gray-400 border-l border-gray-200 bg-gray-50">{fm.suffix}</span>
-                    )}
+            {(() => {
+              const campo = (fm: FieldMeta) => {
+                const val = (currentFare as any)[fm.key];
+                if (val === undefined) return null;
+                const dirty = hasDirtyField(currentClass, fm.key as string);
+                const desc = fm.key === 'waitPerMin' && policy
+                  ? `Tras ${policy.wait.freeMinutes} min gratis, con un tope de ${policy.wait.maxBillableMinutes}`
+                  : fm.desc;
+                return (
+                  <div key={fm.key as string}>
+                    <label className="block text-xs font-semibold text-gray-500 mb-1">
+                      {fm.label}
+                      {desc && (
+                        <span className="ml-1 text-gray-300" title={desc}>
+                          <Info className="w-3 h-3 inline" />
+                        </span>
+                      )}
+                    </label>
+                    <div className={`flex items-center border rounded-lg overflow-hidden transition-colors ${dirty ? 'border-amber-400 bg-amber-50/20' : 'border-gray-200'}`}>
+                      {fm.prefix && (
+                        <span className="px-2.5 text-sm text-gray-400 border-r border-gray-200 bg-gray-50">{fm.prefix}</span>
+                      )}
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        className="flex-1 px-3 py-2 text-sm focus:outline-none bg-transparent text-gray-900 font-medium w-full min-w-0"
+                        value={val}
+                        onChange={e => handleChange(currentClass, fm.key, e.target.value)}
+                      />
+                      {fm.suffix && (
+                        <span className="px-2.5 text-sm text-gray-400 border-l border-gray-200 bg-gray-50">{fm.suffix}</span>
+                      )}
+                    </div>
+                    {desc && <p className="text-[10px] text-gray-400 mt-1 leading-snug">{desc}</p>}
                   </div>
-                  {desc && <p className="text-[10px] text-gray-400 mt-1">{desc}</p>}
-                </div>
+                );
+              };
+
+              return (
+                <>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">
+                      {GRUPO_DISTANCIA.title}
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4">
+                      {GRUPO_DISTANCIA.fields.map(campo)}
+                    </div>
+                  </div>
+
+                  {/* Los tres grupos cortos, uno al lado del otro */}
+                  <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+                    {GRUPOS_CORTOS.map(group => (
+                      <div key={group.title} className={group.fields.length > 1 ? 'xl:col-span-2' : ''}>
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">
+                          {group.title}
+                        </p>
+                        <div className={`grid gap-4 ${group.fields.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                          {group.fields.map(campo)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
               );
-            })}
-                </div>
-              </div>
-            ))}
+            })()}
           </div>
 
           {/* Vista previa — misma fórmula que cobra el servidor */}
