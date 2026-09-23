@@ -97,6 +97,11 @@ export default function Fares() {
   // o no cubre el país. La tasa real de cada viaje la calcula Stripe.
   const [taxRate, setTaxRate] = useState<number | null>(null);
   const [taxDraft, setTaxDraft] = useState('');
+  // La comisión de Urbont: sale de dentro del precio, así que subirla no
+  // encarece el viaje, le quita al chofer.
+  const [commission, setCommission] = useState<number | null>(null);
+  const [commissionDraft, setCommissionDraft] = useState('');
+  const [savingCommission, setSavingCommission] = useState(false);
   const [savingTax, setSavingTax] = useState(false);
 
   const loadData = useCallback(() => {
@@ -110,6 +115,9 @@ export default function Fares() {
         const tasa = typeof res.taxFallbackRatePercent === 'number' ? res.taxFallbackRatePercent : null;
         setTaxRate(tasa);
         setTaxDraft(tasa != null ? String(tasa) : '');
+        const comision = typeof res.platformCommissionPercent === 'number' ? res.platformCommissionPercent : null;
+        setCommission(comision);
+        setCommissionDraft(comision != null ? String(comision) : '');
         if (!activeClass && Object.keys(data).length > 0) {
           setActiveClass(Object.keys(data)[0]);
         }
@@ -419,6 +427,61 @@ export default function Fares() {
           </div>
         </div>
       )}
+
+      {/* Comisión de Urbont — editable */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 space-y-3">
+        <div className="flex items-center gap-2">
+          <Percent className="w-4 h-4 text-(--brand)" />
+          <h2 className="text-sm font-bold text-gray-900">Comisión de Urbont</h2>
+        </div>
+        <p className="text-xs text-gray-500 leading-relaxed">
+          Sale de dentro del precio: el pasajero paga la tarifa de la tabla y de ahí se reparte. Subirla no
+          encarece el viaje, le quita al conductor. Se aplica al instante en los viajes nuevos.
+        </p>
+        <div className="flex items-end gap-3 flex-wrap">
+          <label className="text-xs text-gray-500 space-y-1">
+            <span>Comisión (%)</span>
+            <input
+              type="number"
+              step="0.5"
+              min="0"
+              max="30"
+              value={commissionDraft}
+              onChange={e => setCommissionDraft(e.target.value)}
+              className="block w-32 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--brand)/30"
+            />
+          </label>
+          <button
+            onClick={async () => {
+              setSavingCommission(true);
+              try {
+                const r = await adminFetch('/fares/commission', {
+                  method: 'PUT',
+                  body: JSON.stringify({ platformCommissionPercent: Number(commissionDraft) }),
+                });
+                setCommission(r.platformCommissionPercent);
+                setCommissionDraft(String(r.platformCommissionPercent));
+                toast.success(`Comisión guardada: ${r.platformCommissionPercent}%`);
+              } catch (err: any) {
+                toast.error(err.message || 'No se pudo guardar la comisión');
+              } finally {
+                setSavingCommission(false);
+              }
+            }}
+            disabled={savingCommission || commissionDraft.trim() === '' || Number(commissionDraft) === commission}
+            className="btn-primary flex items-center gap-2 text-xs disabled:opacity-50"
+          >
+            {savingCommission ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            Guardar comisión
+          </button>
+          {commission != null && (
+            <p className="text-xs text-gray-400">
+              En un viaje de $22,00: ${(22 * commission / 100).toFixed(2)} para Urbont y
+              ${(22 * (1 - commission / 100)).toFixed(2)} para el conductor.
+            </p>
+          )}
+        </div>
+      </div>
 
       {/* Impuesto — tasa de respaldo, editable */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 space-y-3">
