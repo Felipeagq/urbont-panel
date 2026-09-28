@@ -15,8 +15,8 @@ interface MoneyBreakdown {
   tarifaBase: number;
   /** null cuando el viaje no tiene el desglose guardado — no es que sea $0. */
   bookingFee: number | null;
-  /** tarifaBase sin el booking fee: es LO QUE SE SUMA a bookingFee, no un tercer monto. */
-  tarifaSinBooking: number | null;
+  /** El recorrido: tarifaBase sin booking fee ni espera. Las tres líneas suman tarifaBase. */
+  tarifaRecorrido: number;
   impuesto: number;
   comisionValet: number;
   propina: number;
@@ -324,15 +324,13 @@ export default function Rides() {
                       <div className="flex items-center justify-between text-xs pl-3">
                         <span className="text-gray-400">Tarifa base</span>
                         {/*
-                          Con desglose, esto es tarifaBase MENOS el booking fee: las
-                          dos líneas de abajo suman el total de arriba. Mostrar
-                          tarifaBase entera aquí y el booking fee debajo hacía parecer
-                          que se sumaban de más — el booking fee ya vivía dentro de
-                          tarifaBase, no aparte de ella.
+                          El recorrido, sin booking fee ni espera: las líneas de
+                          debajo son las otras partes del mismo precio, y todas
+                          juntas suman el total de arriba. Mostrar el precio entero
+                          aquí hacía que el booking fee y la espera se contaran dos
+                          veces.
                         */}
-                        <span className="text-gray-600">
-                          {formatCurrency(detailMoney.tarifaSinBooking ?? detailMoney.tarifaBase)}
-                        </span>
+                        <span className="text-gray-600">{formatCurrency(detailMoney.tarifaRecorrido)}</span>
                       </div>
                       {detailMoney.bookingFee != null ? (
                         <div className="flex items-center justify-between text-xs pl-3">
@@ -348,16 +346,17 @@ export default function Rides() {
                           <span className="text-gray-300 italic">Sin desglose disponible</span>
                         </div>
                       )}
+                      {/* La espera es parte del precio y entra en el reparto, no un cargo aparte. */}
+                      {detailMoney.cargoEspera > 0 && (
+                        <div className="flex items-center justify-between text-xs pl-3">
+                          <span className="text-gray-400">Cargo por espera</span>
+                          <span className="text-gray-600">{formatCurrency(detailMoney.cargoEspera)}</span>
+                        </div>
+                      )}
                       {detailMoney.impuesto > 0 && (
                         <div className="flex items-center justify-between text-xs pl-3">
                           <span className="text-gray-400">Impuesto</span>
                           <span className="text-gray-600">{formatCurrency(detailMoney.impuesto)}</span>
-                        </div>
-                      )}
-                      {detailMoney.comisionValet > 0 && (
-                        <div className="flex items-center justify-between text-xs pl-3">
-                          <span className="text-gray-400">Comisión del valet (no es del chofer)</span>
-                          <span className="text-gray-600">{formatCurrency(detailMoney.comisionValet)}</span>
                         </div>
                       )}
                     </div>
@@ -374,6 +373,11 @@ export default function Rides() {
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
                         Reparto del viaje
                       </p>
+                      {/*
+                        Con valet, el cobro se reparte en tres: su comisión sale del
+                        precio y se le transfiere entera. Antes iba contada dentro
+                        de la parte de Urbont, que la retiene sólo de paso.
+                      */}
                       <div className="flex h-2 rounded-full overflow-hidden bg-gray-100">
                         <div
                           className="bg-(--brand)"
@@ -381,9 +385,17 @@ export default function Rides() {
                             width: `${Math.min(100, (detailMoney.comisionUrbont / Math.max(detailMoney.cobradoAlPasajero, 0.01)) * 100)}%`,
                           }}
                         />
+                        {detailMoney.comisionValet > 0 && (
+                          <div
+                            className="bg-violet-400"
+                            style={{
+                              width: `${Math.min(100, (detailMoney.comisionValet / Math.max(detailMoney.cobradoAlPasajero, 0.01)) * 100)}%`,
+                            }}
+                          />
+                        )}
                         <div className="bg-emerald-400 flex-1" />
                       </div>
-                      <div className="grid grid-cols-2 gap-3 mt-3">
+                      <div className={`grid gap-3 mt-3 ${detailMoney.comisionValet > 0 ? 'grid-cols-3' : 'grid-cols-2'}`}>
                         <div className="border border-gray-100 rounded-xl p-3">
                           <div className="flex items-center gap-1.5 mb-1">
                             <div className="w-2 h-2 rounded-full bg-(--brand)" />
@@ -391,6 +403,15 @@ export default function Rides() {
                           </div>
                           <p className="text-sm font-bold text-gray-900">{formatCurrency(detailMoney.comisionUrbont)}</p>
                         </div>
+                        {detailMoney.comisionValet > 0 && (
+                          <div className="border border-gray-100 rounded-xl p-3">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <div className="w-2 h-2 rounded-full bg-violet-400" />
+                              <span className="text-[11px] font-medium text-gray-500">Valet</span>
+                            </div>
+                            <p className="text-sm font-bold text-gray-900">{formatCurrency(detailMoney.comisionValet)}</p>
+                          </div>
+                        )}
                         <div className="border border-gray-100 rounded-xl p-3">
                           <div className="flex items-center gap-1.5 mb-1">
                             <div className="w-2 h-2 rounded-full bg-emerald-400" />
@@ -425,15 +446,9 @@ export default function Rides() {
                       </div>
                     )}
 
-                    {/* Extra charges — outside the 85/15 split */}
-                    {(detailMoney.cargoEspera > 0 || detailMoney.cargoNoShow > 0 || detailMoney.descuentoPromo > 0) && (
+                    {/* Otros cargos registrados en el viaje. La espera ya no va aquí: es parte del precio. */}
+                    {(detailMoney.cargoNoShow > 0 || detailMoney.descuentoPromo > 0) && (
                       <div className="mt-3 space-y-1.5">
-                        {detailMoney.cargoEspera > 0 && (
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-gray-400">Cargo por espera</span>
-                            <span className="text-gray-600">{formatCurrency(detailMoney.cargoEspera)}</span>
-                          </div>
-                        )}
                         {detailMoney.cargoNoShow > 0 && (
                           <div className="flex items-center justify-between text-xs">
                             <span className="text-gray-400">Cargo por no presentarse</span>
