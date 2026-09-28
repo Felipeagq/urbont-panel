@@ -9,6 +9,9 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
+import type { Zone, ZoneRow, Ciudad } from './shared';
+import { toZone, haversineKm } from './shared';
+import { GoogleMapsSection, MapaGeneral, MapaZona } from './GoogleMapsSection';
 
 /**
  * Zonas de servicio: dónde puede la plataforma aceptar un viaje.
@@ -22,79 +25,7 @@ import { Skeleton } from '@/components/ui/skeleton';
  * en esta base está instalado en un esquema donde sus tipos no se resuelven.
  */
 
-interface Zone {
-  id: string;
-  name: string;
-  active: boolean;
-  timezone: string;
-  centerLat: number;
-  centerLng: number;
-  radiusKm: number;
-  /** ISO 3166-1 alpha-2. Sale de la ciudad al crear la zona. */
-  country: string;
-}
-
-/** La API devuelve los numéricos como texto (`"125.00"`). */
-interface ZoneRow {
-  id: string;
-  name: string;
-  active: boolean;
-  timezone: string;
-  center_lat: string | number | null;
-  center_lng: string | number | null;
-  radius_km: string | number | null;
-  country_code?: string | null;
-  updated_at?: string;
-}
-
-const toZone = (r: ZoneRow): Zone => ({
-  id: r.id,
-  name: r.name,
-  active: r.active,
-  timezone: r.timezone,
-  centerLat: Number(r.center_lat ?? 0),
-  centerLng: Number(r.center_lng ?? 0),
-  radiusKm: Number(r.radius_km ?? 0),
-  country: r.country_code ?? 'US',
-});
-
 /* ── Geometría ───────────────────────────────────────────────────────────── */
-
-const EARTH_RADIUS_KM = 6371;
-
-/**
- * Misma fórmula que `serviceZones.ts` en el backend.
- *
- * Se duplica a propósito: esta pantalla tiene que poder decir qué cubre un radio
- * ANTES de guardarlo. Si preguntara al servidor, el operador sólo vería el
- * efecto de un cambio ya aplicado a los viajes reales.
- */
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-  return EARTH_RADIUS_KM * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-/**
- * Una ciudad del catálogo de GeoNames, tal como la sirve el backend.
- *
- * Antes esto era un array de 19 ciudades que escribí a mano, y eso limitaba la
- * pantalla a Florida: abrir una zona en otro sitio dejaba la cobertura en
- * blanco. Ahora son 34.135 ciudades de 244 países en la base.
- */
-interface Ciudad {
-  id: number;
-  name: string;
-  country: string;
-  admin1: string | null;
-  lat: number;
-  lng: number;
-  population: number;
-  timezone: string;
-}
 
 /**
  * Las ciudades alrededor de un centro, traídas una sola vez por centro.
@@ -135,142 +66,6 @@ function useCiudadesCercanas(lat: number, lng: number, radiusKm: number, habilit
   }, [lat, lng, alcance, valido]);
 
   return ciudades;
-}
-
-/* ── Mapa ────────────────────────────────────────────────────────────────── */
-
-/**
- * Croquis del área, sin librería de mapas.
- *
- * Proyección equirectangular centrada en la zona: a esta escala la distorsión es
- * irrelevante y lo que importa es ver qué queda dentro del círculo. No pretende
- * ser un mapa — no hay costas ni calles — sino responder «¿hasta dónde llega
- * esto?» mientras se arrastra el radio.
- */
-function CroquisZona({ zona, ciudades }: { zona: Zone; ciudades: Ciudad[] }) {
-  const LADO = 260;
-  const radio = Math.max(zona.radiusKm, 1);
-  // El círculo ocupa el 62% del lienzo: deja aire para las ciudades de fuera,
-  // que son justamente las que informan la decisión de ampliar o no.
-  const escala = (LADO * 0.31) / radio;
-  const cosLat = Math.max(0.01, Math.cos((zona.centerLat * Math.PI) / 180));
-
-  const proyectar = (lat: number, lng: number) => ({
-    x: LADO / 2 + (lng - zona.centerLng) * 111 * cosLat * escala,
-    y: LADO / 2 - (lat - zona.centerLat) * 111 * escala,
-  });
-
-  // El catálogo devuelve más de un centenar de ciudades alrededor de un centro;
-  // pintarlas todas daría una mancha de etiquetas superpuestas. Se quedan las
-  // que caben en el lienzo, y de ésas las 12 más pobladas: son las que alguien
-  // reconoce de un vistazo, que es para lo único que sirve este croquis.
-  const visibles = ciudades
-    .map((c) => ({ ...c, ...proyectar(c.lat, c.lng), km: haversineKm(zona.centerLat, zona.centerLng, c.lat, c.lng) }))
-    .filter((c) => c.x > 6 && c.x < LADO - 6 && c.y > 6 && c.y < LADO - 6)
-    .sort((a, b) => b.population - a.population)
-    .slice(0, 12);
-
-  return (
-    <svg viewBox={`0 0 ${LADO} ${LADO}`} className="w-full h-auto" role="img"
-         aria-label={`Área de ${zona.name}: ${radio} km alrededor de ${zona.centerLat.toFixed(4)}, ${zona.centerLng.toFixed(4)}`}>
-      <rect width={LADO} height={LADO} rx="10" className="fill-gray-50" />
-
-      {/* Anillos de referencia a un cuarto, la mitad y tres cuartos del radio */}
-      {[0.25, 0.5, 0.75].map((f) => (
-        <circle key={f} cx={LADO / 2} cy={LADO / 2} r={radio * f * escala}
-                className="fill-none stroke-gray-200" strokeDasharray="2 3" />
-      ))}
-
-      {/* El área de servicio */}
-      <circle cx={LADO / 2} cy={LADO / 2} r={radio * escala}
-              className={zona.active ? 'fill-emerald-500/10 stroke-emerald-500' : 'fill-gray-400/10 stroke-gray-400'}
-              strokeWidth="1.5" />
-
-      {visibles.map((c) => {
-        const dentro = c.km <= radio;
-        return (
-          <g key={c.id}>
-            <circle cx={c.x} cy={c.y} r={dentro ? 3 : 2.5}
-                    className={dentro ? 'fill-emerald-600' : 'fill-gray-400'} />
-            <text x={c.x + 5} y={c.y + 3} className={`text-[7px] ${dentro ? 'fill-emerald-800' : 'fill-gray-500'}`}>
-              {c.name}
-            </text>
-          </g>
-        );
-      })}
-
-      {/* Centro */}
-      <circle cx={LADO / 2} cy={LADO / 2} r="2.5" className="fill-gray-900" />
-    </svg>
-  );
-}
-
-/**
- * Mapa de conjunto: todas las zonas juntas, para ver de un vistazo si dos
- * círculos se solapan (dos zonas activas compitiendo por el mismo territorio)
- * o si queda un hueco de cobertura entre dos ciudades vecinas. El croquis por
- * tarjeta (`CroquisZona`) no puede responder esto — sólo muestra una zona a
- * la vez, aislada de las demás.
- *
- * Misma idea de proyección que `CroquisZona` (equirectangular, sin costas ni
- * calles) pero centrada en el promedio de todas las zonas y escalada para
- * que quepan todas. La opacidad de cada círculo es baja a propósito: donde
- * dos zonas se solapan, el área se ve más oscura porque las capas se suman —
- * es la señal visual de "esto está cubierto dos veces".
- */
-function MapaGeneral({ zonas }: { zonas: Zone[] }) {
-  const LADO = 320;
-
-  if (zonas.length === 0) return null;
-
-  const centerLat = zonas.reduce((s, z) => s + z.centerLat, 0) / zonas.length;
-  const centerLng = zonas.reduce((s, z) => s + z.centerLng, 0) / zonas.length;
-  const cosLat = Math.max(0.01, Math.cos((centerLat * Math.PI) / 180));
-
-  // Cuánto se extiende cada zona desde el centro del mapa: la distancia a su
-  // propio centro más su radio. La escala la fija la que más se extienda,
-  // para que ninguna quede cortada fuera del lienzo.
-  const extents = zonas.map((z) => haversineKm(centerLat, centerLng, z.centerLat, z.centerLng) + Math.max(z.radiusKm, 1));
-  const escala = (LADO * 0.42) / Math.max(...extents, 1);
-
-  const proyectar = (lat: number, lng: number) => ({
-    x: LADO / 2 + (lng - centerLng) * 111 * cosLat * escala,
-    y: LADO / 2 - (lat - centerLat) * 111 * escala,
-  });
-
-  return (
-    <div className="bg-white rounded-xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5">
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-3">
-        Todas las zonas juntas
-      </p>
-      <svg viewBox={`0 0 ${LADO} ${LADO}`} className="w-full h-auto max-w-md mx-auto" role="img"
-           aria-label={`Mapa de conjunto con ${zonas.length} ${zonas.length === 1 ? 'zona' : 'zonas'} de servicio: ${zonas.map((z) => `${z.name} (${z.active ? 'activa' : 'inactiva'}, ${z.radiusKm} km)`).join(', ')}. Las áreas más oscuras indican solapamiento entre dos o más zonas.`}>
-        <rect width={LADO} height={LADO} rx="10" className="fill-gray-50" />
-        {zonas.map((z) => {
-          const p = proyectar(z.centerLat, z.centerLng);
-          const r = Math.max(z.radiusKm, 1) * escala;
-          return (
-            <g key={z.id}>
-              <circle
-                cx={p.x} cy={p.y} r={r}
-                className={z.active ? 'fill-emerald-500/15 stroke-emerald-500' : 'fill-gray-400/10 stroke-gray-300'}
-                strokeWidth="1.25"
-                strokeDasharray={z.active ? undefined : '3 3'}
-              />
-              <circle cx={p.x} cy={p.y} r="2" className={z.active ? 'fill-emerald-700' : 'fill-gray-400'} />
-              <text x={p.x} y={p.y - r - 4} textAnchor="middle"
-                    className={`text-[8px] font-medium ${z.active ? 'fill-gray-700' : 'fill-gray-400'}`}>
-                {z.name}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
-      <p className="text-[10px] text-gray-400 mt-2 text-center">
-        Croquis a escala · sólo las zonas activas cuentan para reservar · las áreas más oscuras están cubiertas por más de una zona.
-      </p>
-    </div>
-  );
 }
 
 /* ── Tarjeta de zona ─────────────────────────────────────────────────────── */
@@ -565,9 +360,9 @@ function TarjetaZona({
             {/* Croquis */}
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Área</p>
-              <CroquisZona zona={zona} ciudades={ciudades} />
+              <MapaZona zona={zona} ciudades={ciudades} />
               <p className="text-[10px] text-gray-500 mt-2">
-                Croquis a escala. Los anillos marcan un cuarto, la mitad y tres cuartos del radio.
+                Mapa del área de servicio. Las ciudades en verde caen dentro del radio configurado.
               </p>
             </div>
           </div>
@@ -1045,38 +840,40 @@ export default function Zones() {
         </div>
       </div>
 
-      {zonas.length > 1 && <MapaGeneral zonas={zonas} />}
+      <GoogleMapsSection>
+        {zonas.length > 1 && <MapaGeneral zonas={zonas} />}
 
-      {mostrarAlta && (
-        <FormularioNueva onCrear={crear} onCancelar={() => setMostrarAlta(false)} creando={creando} />
-      )}
+        {mostrarAlta && (
+          <FormularioNueva onCrear={crear} onCancelar={() => setMostrarAlta(false)} creando={creando} />
+        )}
 
-      {zonas.length === 0 ? (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 flex items-center gap-3 text-amber-800">
-          <AlertTriangle className="w-5 h-5 shrink-0" />
-          <p className="text-sm">
-            No hay ninguna zona configurada. Sin zonas activas nadie puede reservar un viaje.
-          </p>
-        </div>
-      ) : (
-        zonasOrdenadas.map((z) => (
-          <TarjetaZona
-            key={z.id}
-            zona={z}
-            original={originales.find((o) => o.id === z.id) ?? z}
-            onChange={(campo, valor) => cambiar(z.id, campo, valor)}
-            onGuardar={() => guardar(z.id)}
-            onToggle={() => alternar(z.id)}
-            onBorrar={() => borrar(z.id)}
-            guardando={guardando === z.id}
-            cambiandoEstado={alternando === z.id}
-            borrando={borrando === z.id}
-            esUnicaActiva={z.active && activas === 1}
-            expandida={expandidas.has(z.id)}
-            onExpandir={() => alternarExpandida(z.id)}
-          />
-        ))
-      )}
+        {zonas.length === 0 ? (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 flex items-center gap-3 text-amber-800">
+            <AlertTriangle className="w-5 h-5 shrink-0" />
+            <p className="text-sm">
+              No hay ninguna zona configurada. Sin zonas activas nadie puede reservar un viaje.
+            </p>
+          </div>
+        ) : (
+          zonasOrdenadas.map((z) => (
+            <TarjetaZona
+              key={z.id}
+              zona={z}
+              original={originales.find((o) => o.id === z.id) ?? z}
+              onChange={(campo, valor) => cambiar(z.id, campo, valor)}
+              onGuardar={() => guardar(z.id)}
+              onToggle={() => alternar(z.id)}
+              onBorrar={() => borrar(z.id)}
+              guardando={guardando === z.id}
+              cambiandoEstado={alternando === z.id}
+              borrando={borrando === z.id}
+              esUnicaActiva={z.active && activas === 1}
+              expandida={expandidas.has(z.id)}
+              onExpandir={() => alternarExpandida(z.id)}
+            />
+          ))
+        )}
+      </GoogleMapsSection>
 
       {/* La licencia CC BY 4.0 del catálogo exige atribución. */}
       <p className="text-[10px] text-gray-400 pt-2">
