@@ -7,7 +7,7 @@ import { formatDate, formatRelativeTime, formatUrbontId } from '@/lib/utils';
 import {
   FileText, CheckCircle2, XCircle, RefreshCw, AlertTriangle,
   Search, Clock, User, ExternalLink, Loader2, Eye, RotateCcw,
-  ChevronDown, ChevronUp, Users, LayoutGrid, Settings2
+  ChevronDown, ChevronUp, Users, LayoutGrid, Settings2, X
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -158,6 +158,16 @@ export default function Documents() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // Cerrar el modal de detalle con Escape, igual que los demás modales del
+  // panel (ver password modal en /users). Sin esto, un usuario de teclado
+  // sólo podía cerrar haciendo click en el backdrop o en el botón "×".
+  useEffect(() => {
+    if (!preview) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPreview(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [preview]);
+
   const doAction = async (id: string, action: string, body?: object) => {
     setActionLoading(`${id}-${action}`);
     try {
@@ -175,6 +185,10 @@ export default function Documents() {
       setRejectReason('');
       setReuploadTarget(null);
       setReuploadMsg('');
+      // El modal de detalle muestra una copia de `preview`, no el documento
+      // vivo de `documents` — si se dejó abierto tras actuar, quedaría con el
+      // estado/acciones viejos hasta que alguien lo cerrara a mano.
+      setPreview(p => (p?.id === id ? null : p));
       loadData();
     } catch (err: any) {
       toast.error(err.message || 'Error al procesar el documento');
@@ -203,16 +217,128 @@ export default function Documents() {
   const groups = grouped ? groupByDriver(filtered) : [];
   const allExpanded = groups.length > 0 && groups.every(g => expanded.has(g.key));
 
-  const renderCard = (doc: Document) => {
-    const st = STATUS_CONFIG[doc.status];
+  /**
+   * Formulario de rechazo/re-subida + botones de acción de un documento.
+   * Vive en su propia función porque el modal de detalle (líneas ~560+)
+   * necesita exactamente lo mismo que la tarjeta de la grilla — antes sólo
+   * la tarjeta de fondo podía actuar, y para aprobar/rechazar el documento
+   * que acababas de ampliar había que cerrar el modal y volver a ubicar la
+   * tarjeta correcta en el grid.
+   */
+  const renderDocActions = (doc: Document) => {
     const isApproving = actionLoading === `${doc.id}-approve`;
     const isRejecting = actionLoading === `${doc.id}-reject`;
+
+    return (
+      <>
+        {/* Reject form */}
+        {rejectTarget === doc.id && (
+          <div className="mb-3 space-y-2">
+            <input
+              type="text"
+              placeholder="Motivo del rechazo..."
+              value={rejectReason}
+              onChange={e => setRejectReason(e.target.value)}
+              className="w-full border border-red-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-red-300 bg-red-50"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => rejectReason.trim() && doAction(doc.id, 'reject', { reason: rejectReason.trim() })}
+                disabled={!rejectReason.trim() || isRejecting}
+                className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium disabled:opacity-50"
+              >
+                {isRejecting && <Loader2 className="w-3 h-3 animate-spin" />}
+                Confirmar
+              </button>
+              <button onClick={() => { setRejectTarget(null); setRejectReason(''); }} className="px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-xs">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Re-upload form */}
+        {reuploadTarget === doc.id && (
+          <div className="mb-3 space-y-2">
+            <input
+              type="text"
+              placeholder="Mensaje para el conductor..."
+              value={reuploadMsg}
+              onChange={e => setReuploadMsg(e.target.value)}
+              className="w-full border border-blue-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300 bg-blue-50"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => reuploadMsg.trim() && doAction(doc.id, 'request-reupload', { message: reuploadMsg.trim() })}
+                disabled={!reuploadMsg.trim()}
+                className="flex-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium disabled:opacity-50"
+              >
+                Enviar solicitud
+              </button>
+              <button onClick={() => { setReuploadTarget(null); setReuploadMsg(''); }} className="px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-xs">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Actions */}
+        {doc.status === 'pending' && rejectTarget !== doc.id && reuploadTarget !== doc.id && (
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => doAction(doc.id, 'approve')}
+              disabled={isApproving}
+              className="flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+            >
+              {isApproving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+              Aprobar
+            </button>
+            <button
+              onClick={() => setRejectTarget(doc.id)}
+              className="flex items-center justify-center gap-1.5 px-3 py-2 border border-red-200 text-red-600 bg-white rounded-lg text-xs font-medium hover:bg-red-50 transition-colors"
+            >
+              <XCircle className="w-3.5 h-3.5" /> Rechazar
+            </button>
+            <button
+              onClick={() => setReuploadTarget(doc.id)}
+              className="col-span-2 flex items-center justify-center gap-1.5 px-3 py-2 border border-blue-200 text-blue-600 bg-white rounded-lg text-xs font-medium hover:bg-blue-50 transition-colors"
+            >
+              <RotateCcw className="w-3.5 h-3.5" /> Pedir re-subida
+            </button>
+          </div>
+        )}
+        {doc.status === 'rejected' && rejectTarget !== doc.id && reuploadTarget !== doc.id && (
+          <button
+            onClick={() => doAction(doc.id, 'approve')}
+            disabled={isApproving}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+          >
+            {isApproving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+            Aprobar de todos modos
+          </button>
+        )}
+      </>
+    );
+  };
+
+  const renderCard = (doc: Document) => {
+    const st = STATUS_CONFIG[doc.status];
     const isPdf = doc.fileUrl?.endsWith('.pdf');
 
     return (
       <div key={doc.id} className="bg-white rounded-xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden flex flex-col">
         {/* Document preview */}
-        <div className="h-44 bg-gray-50 relative group cursor-pointer border-b border-gray-100" onClick={() => setPreview(doc)}>
+        <div
+          role={doc.fileUrl ? 'button' : undefined}
+          tabIndex={doc.fileUrl ? 0 : undefined}
+          aria-label={doc.fileUrl ? `Ver documento ampliado: ${docTypeLabel(doc.docType)}` : undefined}
+          onClick={() => doc.fileUrl && setPreview(doc)}
+          onKeyDown={e => {
+            if (!doc.fileUrl) return;
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPreview(doc); }
+          }}
+          className={`h-44 bg-gray-50 relative group border-b border-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-(--brand)/40 focus-visible:ring-inset ${doc.fileUrl ? 'cursor-pointer' : ''}`}
+        >
           {isPdf ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
               <FileText className="w-10 h-10 text-gray-300" />
@@ -224,6 +350,13 @@ export default function Documents() {
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
               <FileText className="w-10 h-10 text-gray-300" />
               <span className="text-xs text-gray-400">Sin archivo</span>
+            </div>
+          )}
+          {doc.fileUrl && !isPdf && (
+            // Señal persistente de que la miniatura es clickeable — el overlay de
+            // abajo sólo aparece en hover, invisible en touch/tablet.
+            <div className="absolute bottom-2 right-2 bg-white/90 rounded-full p-1.5 shadow-sm opacity-80 group-hover:opacity-100 transition-opacity pointer-events-none">
+              <Eye className="w-3.5 h-3.5 text-gray-600" />
             </div>
           )}
           {doc.fileUrl && (
@@ -264,94 +397,7 @@ export default function Documents() {
             </div>
           )}
 
-          {/* Reject form */}
-          {rejectTarget === doc.id && (
-            <div className="mb-3 space-y-2">
-              <input
-                type="text"
-                placeholder="Motivo del rechazo..."
-                value={rejectReason}
-                onChange={e => setRejectReason(e.target.value)}
-                className="w-full border border-red-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-red-300 bg-red-50"
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={() => rejectReason.trim() && doAction(doc.id, 'reject', { reason: rejectReason.trim() })}
-                  disabled={!rejectReason.trim() || isRejecting}
-                  className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium disabled:opacity-50"
-                >
-                  {isRejecting && <Loader2 className="w-3 h-3 animate-spin" />}
-                  Confirmar
-                </button>
-                <button onClick={() => { setRejectTarget(null); setRejectReason(''); }} className="px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-xs">
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Re-upload form */}
-          {reuploadTarget === doc.id && (
-            <div className="mb-3 space-y-2">
-              <input
-                type="text"
-                placeholder="Mensaje para el conductor..."
-                value={reuploadMsg}
-                onChange={e => setReuploadMsg(e.target.value)}
-                className="w-full border border-blue-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300 bg-blue-50"
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={() => reuploadMsg.trim() && doAction(doc.id, 'request-reupload', { message: reuploadMsg.trim() })}
-                  disabled={!reuploadMsg.trim()}
-                  className="flex-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium disabled:opacity-50"
-                >
-                  Enviar solicitud
-                </button>
-                <button onClick={() => { setReuploadTarget(null); setReuploadMsg(''); }} className="px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-xs">
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Actions */}
-          {doc.status === 'pending' && !rejectTarget && !reuploadTarget && (
-            <div className="mt-auto grid grid-cols-2 gap-2">
-              <button
-                onClick={() => doAction(doc.id, 'approve')}
-                disabled={isApproving}
-                className="flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors"
-              >
-                {isApproving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                Aprobar
-              </button>
-              <button
-                onClick={() => setRejectTarget(doc.id)}
-                className="flex items-center justify-center gap-1.5 px-3 py-2 border border-red-200 text-red-600 bg-white rounded-lg text-xs font-medium hover:bg-red-50 transition-colors"
-              >
-                <XCircle className="w-3.5 h-3.5" /> Rechazar
-              </button>
-              <button
-                onClick={() => setReuploadTarget(doc.id)}
-                className="col-span-2 flex items-center justify-center gap-1.5 px-3 py-2 border border-blue-200 text-blue-600 bg-white rounded-lg text-xs font-medium hover:bg-blue-50 transition-colors"
-              >
-                <RotateCcw className="w-3.5 h-3.5" /> Pedir re-subida
-              </button>
-            </div>
-          )}
-          {doc.status === 'rejected' && (
-            <div className="mt-auto">
-              <button
-                onClick={() => doAction(doc.id, 'approve')}
-                disabled={isApproving}
-                className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors"
-              >
-                {isApproving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                Aprobar de todos modos
-              </button>
-            </div>
-          )}
+          <div className="mt-auto">{renderDocActions(doc)}</div>
         </div>
       </div>
     );
@@ -546,20 +592,73 @@ export default function Documents() {
         </div>
       )}
 
-      {/* Image preview modal */}
-      {preview && preview.fileUrl && !preview.fileUrl.endsWith('.pdf') && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-6" onClick={() => setPreview(null)}>
-          <div className="max-w-3xl max-h-[90vh] relative">
-            <img src={preview.fileUrl} alt={preview.docType} className="max-w-full max-h-full object-contain rounded-xl" />
-            <div className="absolute top-3 left-3 bg-black/60 text-white px-3 py-1.5 rounded-lg text-xs">
-              {docTypeLabel(preview.docType)} · {preview.driverName}
+      {/* Document detail modal — imagen ampliada + info + acciones en el mismo
+          contexto. Antes ampliar y decidir eran dos pasos separados: había que
+          cerrar el lightbox, volver a ubicar la tarjeta correcta en el grid, y
+          recién ahí aprobar/rechazar. */}
+      {preview && preview.fileUrl && !preview.fileUrl.endsWith('.pdf') && (() => {
+        const st = STATUS_CONFIG[preview.status];
+        return (
+          <div
+            className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 md:p-6"
+            onClick={() => setPreview(null)}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Detalle del documento: ${docTypeLabel(preview.docType)}`}
+          >
+            <div
+              className="w-full max-w-4xl max-h-[90vh] grid grid-cols-1 md:grid-cols-[1fr_300px] bg-white rounded-xl overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Image */}
+              <div className="bg-black flex items-center justify-center min-h-60 md:min-h-0">
+                <img src={preview.fileUrl} alt={preview.docType} className="max-w-full max-h-[50vh] md:max-h-[90vh] object-contain" />
+              </div>
+
+              {/* Info + actions panel */}
+              <div className="p-5 flex flex-col overflow-y-auto">
+                <div className="flex items-start justify-between gap-2 mb-1">
+                  <h3 className="text-sm font-semibold text-gray-900">{docTypeLabel(preview.docType)}</h3>
+                  <button
+                    autoFocus
+                    onClick={() => setPreview(null)}
+                    aria-label="Cerrar vista previa"
+                    className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors shrink-0"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-3">
+                  <User className="w-3 h-3" /> {preview.driverName}
+                </div>
+                <span className={`badge-sm ${st.class} w-fit mb-3`}>{st.label}</span>
+
+                <div className="flex items-center gap-1.5 text-[11px] text-gray-400 mb-3">
+                  <Clock className="w-3 h-3" />
+                  Subido {formatRelativeTime(preview.uploadedAt)}
+                </div>
+
+                {preview.rejectionReason && (
+                  <div className="mb-3 p-2.5 bg-red-50 border border-red-100 rounded-lg text-xs text-red-700">
+                    <span className="font-medium">Rechazado:</span> {preview.rejectionReason}
+                  </div>
+                )}
+
+                <a
+                  href={preview.fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mb-4 flex items-center gap-1.5 text-xs text-(--brand) hover:underline w-fit"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" /> Abrir archivo original
+                </a>
+
+                <div className="mt-auto pt-2">{renderDocActions(preview)}</div>
+              </div>
             </div>
-            <button onClick={() => setPreview(null)} className="absolute top-3 right-3 bg-black/60 text-white w-8 h-8 rounded-full flex items-center justify-center text-lg hover:bg-black/80">
-              ×
-            </button>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

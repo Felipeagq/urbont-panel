@@ -5,6 +5,7 @@ import { adminFetch } from '@/lib/api';
 import {
   Globe2, RefreshCw, Save, AlertTriangle, Loader2, Plus, X,
   Power, PowerOff, MapPin, Info, Trash2, Search, ChevronRight,
+  ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -105,14 +106,18 @@ interface Ciudad {
  *
  * Ante un fallo devuelve lista vacía: la zona sigue funcionando, sólo se queda
  * sin la referencia de qué cubre.
+ *
+ * `habilitado` existe para no disparar el fetch en tarjetas colapsadas: con
+ * la lista completa mostrando todas las zonas a la vez, pedir el catálogo de
+ * cada una al montar era N fetches que el operador nunca llegaba a ver.
  */
-function useCiudadesCercanas(lat: number, lng: number, radiusKm: number) {
+function useCiudadesCercanas(lat: number, lng: number, radiusKm: number, habilitado: boolean) {
   const [ciudades, setCiudades] = useState<Ciudad[]>([]);
 
   // El radio entra redondeado a centenas para que ajustarlo de 120 a 130 no
   // vuelva a pedir nada: sólo importa para dimensionar la caja de búsqueda.
   const alcance = Math.max(100, Math.ceil((radiusKm || 150) / 100) * 100);
-  const valido = Number.isFinite(lat) && Number.isFinite(lng)
+  const valido = habilitado && Number.isFinite(lat) && Number.isFinite(lng)
     && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
 
   useEffect(() => {
@@ -200,6 +205,74 @@ function CroquisZona({ zona, ciudades }: { zona: Zone; ciudades: Ciudad[] }) {
   );
 }
 
+/**
+ * Mapa de conjunto: todas las zonas juntas, para ver de un vistazo si dos
+ * círculos se solapan (dos zonas activas compitiendo por el mismo territorio)
+ * o si queda un hueco de cobertura entre dos ciudades vecinas. El croquis por
+ * tarjeta (`CroquisZona`) no puede responder esto — sólo muestra una zona a
+ * la vez, aislada de las demás.
+ *
+ * Misma idea de proyección que `CroquisZona` (equirectangular, sin costas ni
+ * calles) pero centrada en el promedio de todas las zonas y escalada para
+ * que quepan todas. La opacidad de cada círculo es baja a propósito: donde
+ * dos zonas se solapan, el área se ve más oscura porque las capas se suman —
+ * es la señal visual de "esto está cubierto dos veces".
+ */
+function MapaGeneral({ zonas }: { zonas: Zone[] }) {
+  const LADO = 320;
+
+  if (zonas.length === 0) return null;
+
+  const centerLat = zonas.reduce((s, z) => s + z.centerLat, 0) / zonas.length;
+  const centerLng = zonas.reduce((s, z) => s + z.centerLng, 0) / zonas.length;
+  const cosLat = Math.max(0.01, Math.cos((centerLat * Math.PI) / 180));
+
+  // Cuánto se extiende cada zona desde el centro del mapa: la distancia a su
+  // propio centro más su radio. La escala la fija la que más se extienda,
+  // para que ninguna quede cortada fuera del lienzo.
+  const extents = zonas.map((z) => haversineKm(centerLat, centerLng, z.centerLat, z.centerLng) + Math.max(z.radiusKm, 1));
+  const escala = (LADO * 0.42) / Math.max(...extents, 1);
+
+  const proyectar = (lat: number, lng: number) => ({
+    x: LADO / 2 + (lng - centerLng) * 111 * cosLat * escala,
+    y: LADO / 2 - (lat - centerLat) * 111 * escala,
+  });
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-3">
+        Todas las zonas juntas
+      </p>
+      <svg viewBox={`0 0 ${LADO} ${LADO}`} className="w-full h-auto max-w-md mx-auto" role="img"
+           aria-label={`Mapa de conjunto con ${zonas.length} ${zonas.length === 1 ? 'zona' : 'zonas'} de servicio: ${zonas.map((z) => `${z.name} (${z.active ? 'activa' : 'inactiva'}, ${z.radiusKm} km)`).join(', ')}. Las áreas más oscuras indican solapamiento entre dos o más zonas.`}>
+        <rect width={LADO} height={LADO} rx="10" className="fill-gray-50" />
+        {zonas.map((z) => {
+          const p = proyectar(z.centerLat, z.centerLng);
+          const r = Math.max(z.radiusKm, 1) * escala;
+          return (
+            <g key={z.id}>
+              <circle
+                cx={p.x} cy={p.y} r={r}
+                className={z.active ? 'fill-emerald-500/15 stroke-emerald-500' : 'fill-gray-400/10 stroke-gray-300'}
+                strokeWidth="1.25"
+                strokeDasharray={z.active ? undefined : '3 3'}
+              />
+              <circle cx={p.x} cy={p.y} r="2" className={z.active ? 'fill-emerald-700' : 'fill-gray-400'} />
+              <text x={p.x} y={p.y - r - 4} textAnchor="middle"
+                    className={`text-[8px] font-medium ${z.active ? 'fill-gray-700' : 'fill-gray-400'}`}>
+                {z.name}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      <p className="text-[10px] text-gray-400 mt-2 text-center">
+        Croquis a escala · sólo las zonas activas cuentan para reservar · las áreas más oscuras están cubiertas por más de una zona.
+      </p>
+    </div>
+  );
+}
+
 /* ── Tarjeta de zona ─────────────────────────────────────────────────────── */
 
 /** Los que viven plegados en «ajuste fino». El radio va aparte, siempre visible. */
@@ -210,7 +283,7 @@ const CAMPOS_FINOS: Array<{ key: 'centerLat' | 'centerLng'; label: string }> = [
 
 function TarjetaZona({
   zona, original, onChange, onGuardar, onToggle, onBorrar,
-  guardando, cambiandoEstado, borrando, esUnicaActiva,
+  guardando, cambiandoEstado, borrando, esUnicaActiva, expandida, onExpandir,
 }: {
   zona: Zone;
   original: Zone;
@@ -222,7 +295,11 @@ function TarjetaZona({
   cambiandoEstado: boolean;
   borrando: boolean;
   esUnicaActiva: boolean;
+  expandida: boolean;
+  onExpandir: () => void;
 }) {
+  const [finoAbierto, setFinoAbierto] = useState(false);
+
   const sucio = JSON.stringify(zona) !== JSON.stringify(original);
   const dirtyCampo = (c: keyof Zone) => zona[c] !== original[c];
 
@@ -234,7 +311,10 @@ function TarjetaZona({
   if (!(zona.centerLat >= -90 && zona.centerLat <= 90)) errores.push('La latitud debe estar entre -90 y 90.');
   if (!(zona.centerLng >= -180 && zona.centerLng <= 180)) errores.push('La longitud debe estar entre -180 y 180.');
 
-  const ciudades = useCiudadesCercanas(zona.centerLat, zona.centerLng, zona.radiusKm);
+  // Sólo se pide el catálogo de ciudades (y sólo se dibuja el croquis) cuando
+  // la tarjeta está abierta: con todas las zonas siempre expandidas, cada una
+  // disparaba su propio fetch al montar la pantalla aunque nadie la mirara.
+  const ciudades = useCiudadesCercanas(zona.centerLat, zona.centerLng, zona.radiusKm, expandida);
 
   const cobertura = useMemo(() => {
     if (!(zona.radiusKm > 0)) return { dentro: [], fuera: [], totalDentro: 0 };
@@ -259,19 +339,32 @@ function TarjetaZona({
     <div className={`bg-white rounded-xl border shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden ${
       zona.active ? 'border-gray-100' : 'border-gray-200 bg-gray-50/50'
     }`}>
-      {/* Cabecera */}
+      {/* Cabecera — clickeable en su mitad izquierda para expandir/contraer;
+          los botones de acción de la derecha llevan su propio stopPropagation
+          implícito porque no están anidados dentro de ese botón. */}
       <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3">
-        <span className={`flex items-center justify-center w-10 h-10 rounded-lg shrink-0 ${
-          zona.active ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-400'
-        }`}>
-          <MapPin className="w-5 h-5" strokeWidth={1.75} aria-hidden="true" />
-        </span>
-        <div className="min-w-0">
-          <h2 className="text-sm font-bold text-gray-900 truncate">{original.name}</h2>
-          <p className="text-xs text-gray-400 uppercase tracking-wider">{zona.id}</p>
-        </div>
+        <button
+          onClick={onExpandir}
+          aria-expanded={expandida}
+          className="flex items-center gap-3 min-w-0 flex-1 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-(--brand)/40 rounded-lg -m-1 p-1"
+        >
+          <span className={`flex items-center justify-center w-10 h-10 rounded-lg shrink-0 ${
+            zona.active ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-400'
+          }`}>
+            <MapPin className="w-5 h-5" strokeWidth={1.75} aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-sm font-bold text-gray-900 truncate">{original.name}</h2>
+            <p className="text-xs text-gray-400 uppercase tracking-wider">
+              {zona.id}
+              {!expandida && (
+                <span className="normal-case tracking-normal text-gray-500"> · {zona.radiusKm} km</span>
+              )}
+            </p>
+          </div>
+        </button>
 
-        <div className="ml-auto flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           {sucio && (
             <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-3 py-1">
               Sin guardar
@@ -314,163 +407,196 @@ function TarjetaZona({
               Borrar
             </button>
           )}
-        </div>
-      </div>
 
-      <div className="p-5 grid lg:grid-cols-[1fr_280px] gap-6">
-        {/* Campos */}
-        <div className="flex flex-col gap-5">
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 mb-1">Nombre</label>
-            <input
-              type="text"
-              value={zona.name}
-              onChange={(e) => onChange('name', e.target.value)}
-              className={`w-full px-3 py-2 text-sm border rounded-lg bg-transparent text-gray-900 font-medium focus:outline-none ${
-                dirtyCampo('name') ? 'border-amber-400 bg-amber-50/20' : 'border-gray-200'
-              }`}
-            />
-            <p className="text-[10px] text-gray-400 mt-1">Lo ve el equipo, no el pasajero</p>
-          </div>
-
-          {/* El radio es el único número que se toca a diario: va solo y arriba. */}
-          <div className="max-w-[200px]">
-            <label className="block text-xs font-semibold text-gray-500 mb-1">
-              Radio
-              <span className="ml-1 text-gray-300" title="Alcance desde el centro de la zona">
-                <Info className="w-3 h-3 inline" />
-              </span>
-            </label>
-            <div className={`flex items-center border rounded-lg overflow-hidden transition-colors ${
-              dirtyCampo('radiusKm') ? 'border-amber-400 bg-amber-50/20' : 'border-gray-200'
-            }`}>
-              <input
-                type="number"
-                step="1"
-                value={zona.radiusKm}
-                onChange={(e) => onChange('radiusKm', e.target.value === '' ? 0 : parseFloat(e.target.value))}
-                className="flex-1 w-full px-3 py-2 text-sm focus:outline-none bg-transparent text-gray-900 font-medium tabular-nums"
-              />
-              <span className="px-2.5 text-sm text-gray-400 border-l border-gray-200 bg-gray-50">km</span>
-            </div>
-          </div>
-
-          {/* Centro y zona horaria se pliegan: los rellena la ciudad al crear la
-              zona, y sólo se tocan para corregir. No se quitan, porque las
-              coordenadas siguen siendo la verdad en la base. */}
-          <details className="group">
-            <summary className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 cursor-pointer hover:text-gray-600 select-none list-none flex items-center gap-1.5">
-              <ChevronRight className="w-3 h-3 transition-transform group-open:rotate-90" aria-hidden="true" />
-              Ajuste fino del centro
-              {(dirtyCampo('centerLat') || dirtyCampo('centerLng') || dirtyCampo('timezone')) && (
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Cambios sin guardar aquí dentro" />
-              )}
-            </summary>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-3">
-              {CAMPOS_FINOS.map((c) => (
-                <div key={c.key}>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1">{c.label}</label>
-                  <input
-                    type="number"
-                    step="0.0001"
-                    value={zona[c.key]}
-                    onChange={(e) => onChange(c.key, e.target.value === '' ? 0 : parseFloat(e.target.value))}
-                    className={`w-full px-3 py-2 text-sm border rounded-lg bg-transparent text-gray-900 font-medium tabular-nums focus:outline-none ${
-                      dirtyCampo(c.key) ? 'border-amber-400 bg-amber-50/20' : 'border-gray-200'
-                    }`}
-                  />
-                </div>
-              ))}
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1">Zona horaria</label>
-                <input
-                  type="text"
-                  value={zona.timezone}
-                  onChange={(e) => onChange('timezone', e.target.value)}
-                  placeholder="America/New_York"
-                  className={`w-full px-3 py-2 text-sm border rounded-lg bg-transparent text-gray-900 font-medium focus:outline-none ${
-                    dirtyCampo('timezone') ? 'border-amber-400 bg-amber-50/20' : 'border-gray-200'
-                  }`}
-                />
-              </div>
-            </div>
-            <p className="text-[10px] text-gray-400 mt-2">
-              La zona horaria decide a qué hora local se aplica el recargo por demanda.
-              La rellena la ciudad al crear la zona; cámbiala sólo si sabes que está mal.
-            </p>
-          </details>
-
-          {/* Cobertura, en ciudades y no en kilómetros */}
-          <div className="border-t border-gray-100 pt-4">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">
-              Qué cubre este radio
-            </p>
-            {cobertura.dentro.length === 0 ? (
-              <p className="text-xs text-gray-500">
-                Ninguna ciudad del catálogo entra en el área. Comprueba el centro y el radio.
-              </p>
-            ) : (
-              <>
-                <div className="flex flex-wrap gap-1.5">
-                  {cobertura.dentro.map((c) => (
-                    <span key={c.id} className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                      {c.name} <span className="text-emerald-500/70 tabular-nums">{Math.round(c.km)} km</span>
-                    </span>
-                  ))}
-                </div>
-                {cobertura.totalDentro > cobertura.dentro.length && (
-                  <p className="text-[10px] text-gray-400 mt-1.5 tabular-nums">
-                    Las {cobertura.dentro.length} más pobladas de {cobertura.totalDentro} poblaciones dentro del área.
-                  </p>
-                )}
-              </>
-            )}
-            {cobertura.fuera.length > 0 && (
-              <>
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mt-3 mb-2">
-                  Lo más cercano que queda fuera
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {cobertura.fuera.map((c) => (
-                    <span key={c.id} className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 border border-gray-200">
-                      {c.name} <span className="tabular-nums">{Math.round(c.km)} km</span>
-                    </span>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Croquis */}
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Área</p>
-          <CroquisZona zona={zona} ciudades={ciudades} />
-          <p className="text-[10px] text-gray-400 mt-2">
-            Croquis a escala. Los anillos marcan un cuarto, la mitad y tres cuartos del radio.
-          </p>
-        </div>
-      </div>
-
-      {/* Pie: guardar */}
-      {sucio && (
-        <div className="px-5 py-3 bg-amber-50 border-t border-amber-200 flex items-center justify-between gap-4">
-          <p className="text-xs text-amber-800">
-            {errores.length > 0
-              ? errores[0]
-              : 'Al guardar, el cambio se aplica de inmediato a los viajes nuevos.'}
-          </p>
           <button
-            onClick={onGuardar}
-            disabled={guardando || errores.length > 0}
-            className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 text-white rounded-lg text-xs font-medium hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+            onClick={onExpandir}
+            aria-expanded={expandida}
+            aria-label={expandida ? `Contraer ${original.name}` : `Expandir ${original.name}`}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-(--brand)/40"
           >
-            {guardando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-            Guardar zona
+            {expandida ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
         </div>
+      </div>
+
+      {expandida && (
+        <>
+          <div className="p-5 grid lg:grid-cols-[1fr_280px] gap-6">
+            {/* Campos */}
+            <div className="flex flex-col gap-5">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Nombre</label>
+                <input
+                  type="text"
+                  value={zona.name}
+                  onChange={(e) => onChange('name', e.target.value)}
+                  className={`w-full px-3 py-2 text-sm border rounded-lg bg-transparent text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand) ${
+                    dirtyCampo('name') ? 'border-amber-400 bg-amber-50/20' : 'border-gray-200'
+                  }`}
+                />
+                <p className="text-[10px] text-gray-500 mt-1">Lo ve el equipo, no el pasajero</p>
+              </div>
+
+              {/* El radio es el único número que se toca a diario: va solo y arriba. */}
+              <div className="max-w-[200px]">
+                <label className="block text-xs font-semibold text-gray-500 mb-1">
+                  Radio
+                  <span className="ml-1 text-gray-300" title="Alcance desde el centro de la zona">
+                    <Info className="w-3 h-3 inline" />
+                  </span>
+                </label>
+                <div className={`flex items-center border rounded-lg overflow-hidden transition-colors focus-within:ring-2 focus-within:ring-(--brand)/30 focus-within:border-(--brand) ${
+                  dirtyCampo('radiusKm') ? 'border-amber-400 bg-amber-50/20' : 'border-gray-200'
+                }`}>
+                  <input
+                    type="number"
+                    step="1"
+                    value={zona.radiusKm}
+                    onChange={(e) => onChange('radiusKm', e.target.value === '' ? 0 : parseFloat(e.target.value))}
+                    className="flex-1 w-full px-3 py-2 text-sm focus:outline-none bg-transparent text-gray-900 font-medium tabular-nums"
+                  />
+                  <span className="px-2.5 text-sm text-gray-400 border-l border-gray-200 bg-gray-50">km</span>
+                </div>
+              </div>
+
+              {/* El centro ya no vive escondido: son las coordenadas que definen
+                  literalmente dónde está la zona, así que quedan visibles en modo
+                  lectura aquí. Sólo la EDICIÓN queda un clic más lejos, detrás del
+                  detalle — a propósito, porque es un campo que rara vez se toca y
+                  conviene que no se edite sin querer. */}
+              <p className="text-xs text-gray-600 tabular-nums -mt-2">
+                Centro: {zona.centerLat.toFixed(4)}, {zona.centerLng.toFixed(4)} · {zona.timezone}
+                {(dirtyCampo('centerLat') || dirtyCampo('centerLng') || dirtyCampo('timezone')) && (
+                  <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" title="Cambios sin guardar" />
+                )}
+                {' '}
+                <button
+                  type="button"
+                  onClick={() => setFinoAbierto(true)}
+                  className="text-(--brand) hover:underline font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-(--brand)/40 rounded"
+                >
+                  Editar centro
+                </button>
+              </p>
+
+              <details className="group" open={finoAbierto} onToggle={(e) => setFinoAbierto((e.target as HTMLDetailsElement).open)}>
+                <summary className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 cursor-pointer hover:text-gray-700 select-none list-none flex items-center gap-1.5">
+                  <ChevronRight className="w-3 h-3 transition-transform group-open:rotate-90" aria-hidden="true" />
+                  Editar centro y zona horaria
+                </summary>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-3">
+                  {CAMPOS_FINOS.map((c) => (
+                    <div key={c.key}>
+                      <label className="block text-xs font-semibold text-gray-500 mb-1">{c.label}</label>
+                      <input
+                        type="number"
+                        step="0.0001"
+                        value={zona[c.key]}
+                        onChange={(e) => onChange(c.key, e.target.value === '' ? 0 : parseFloat(e.target.value))}
+                        className={`w-full px-3 py-2 text-sm border rounded-lg bg-transparent text-gray-900 font-medium tabular-nums focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand) ${
+                          dirtyCampo(c.key) ? 'border-amber-400 bg-amber-50/20' : 'border-gray-200'
+                        }`}
+                      />
+                    </div>
+                  ))}
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 mb-1">Zona horaria</label>
+                    <input
+                      type="text"
+                      value={zona.timezone}
+                      onChange={(e) => onChange('timezone', e.target.value)}
+                      placeholder="America/New_York"
+                      className={`w-full px-3 py-2 text-sm border rounded-lg bg-transparent text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand) ${
+                        dirtyCampo('timezone') ? 'border-amber-400 bg-amber-50/20' : 'border-gray-200'
+                      }`}
+                    />
+                  </div>
+                </div>
+                <p className="text-[10px] text-gray-500 mt-2">
+                  La zona horaria decide a qué hora local se aplica el recargo por demanda.
+                  La rellena la ciudad al crear la zona; cámbiala sólo si sabes que está mal.
+                </p>
+              </details>
+
+              {/* Cobertura, en ciudades y no en kilómetros */}
+              <div className="border-t border-gray-100 pt-4">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">
+                  Qué cubre este radio
+                </p>
+                {cobertura.dentro.length === 0 ? (
+                  <p className="text-xs text-gray-500">
+                    Ninguna ciudad del catálogo entra en el área. Comprueba el centro y el radio.
+                  </p>
+                ) : (
+                  <>
+                    <div className="flex flex-wrap gap-1.5">
+                      {cobertura.dentro.map((c) => (
+                        <span key={c.id} className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          {c.name} <span className="text-emerald-500/70 tabular-nums">{Math.round(c.km)} km</span>
+                        </span>
+                      ))}
+                    </div>
+                    {cobertura.totalDentro > cobertura.dentro.length && (
+                      <p className="text-[10px] text-gray-500 mt-1.5 tabular-nums">
+                        Las {cobertura.dentro.length} más pobladas de {cobertura.totalDentro} poblaciones dentro del área.
+                      </p>
+                    )}
+                  </>
+                )}
+                {cobertura.fuera.length > 0 && (
+                  <>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mt-3 mb-2">
+                      Lo más cercano que queda fuera
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {cobertura.fuera.map((c) => (
+                        <span key={c.id} className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 border border-gray-200">
+                          {c.name} <span className="tabular-nums">{Math.round(c.km)} km</span>
+                        </span>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Croquis */}
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Área</p>
+              <CroquisZona zona={zona} ciudades={ciudades} />
+              <p className="text-[10px] text-gray-500 mt-2">
+                Croquis a escala. Los anillos marcan un cuarto, la mitad y tres cuartos del radio.
+              </p>
+            </div>
+          </div>
+
+          {/* Pie: guardar. Ámbar = hay cambios válidos por guardar; rojo = hay
+              además un error de validación que impide guardarlos — antes ambos
+              casos compartían el mismo color y no se distinguían de un vistazo. */}
+          {sucio && (
+            <div className={`px-5 py-3 border-t flex items-center justify-between gap-4 ${
+              errores.length > 0 ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'
+            }`}>
+              <p className={`text-xs ${errores.length > 0 ? 'text-red-700' : 'text-amber-800'}`}>
+                {errores.length > 0
+                  ? errores[0]
+                  : 'Al guardar, el cambio se aplica de inmediato a los viajes nuevos.'}
+              </p>
+              <button
+                onClick={onGuardar}
+                disabled={guardando || errores.length > 0}
+                className={`flex items-center gap-1.5 px-4 py-2 text-white rounded-lg text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed shrink-0 ${
+                  errores.length > 0 ? 'bg-red-600' : 'bg-amber-600 hover:bg-amber-700'
+                }`}
+              >
+                {guardando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                Guardar zona
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -542,7 +668,22 @@ function FormularioNueva({ onCrear, onCancelar, creando }: {
   };
 
   const radio = parseFloat(f.radiusKm);
-  const valido = elegida !== null && f.id.length > 0 && Number.isFinite(radio) && radio > 0;
+  const radioValido = Number.isFinite(radio) && radio > 0;
+  const valido = elegida !== null && f.id.length > 0 && radioValido;
+
+  // Qué cubriría el radio elegido, para no crear la zona a ciegas y tener que
+  // corregirla después — misma pregunta que ya responde `TarjetaZona` una vez
+  // creada, adelantada aquí con la misma fuente de datos.
+  const ciudadesPreview = useCiudadesCercanas(elegida?.lat ?? 0, elegida?.lng ?? 0, radio || 150, elegida !== null);
+  const coberturaPreview = useMemo(() => {
+    if (!elegida || !radioValido) return { dentro: [], totalDentro: 0 };
+    const conKm = ciudadesPreview.map((c) => ({ ...c, km: haversineKm(elegida.lat, elegida.lng, c.lat, c.lng) }));
+    const dentro = conKm.filter((c) => c.km <= radio);
+    return {
+      dentro: [...dentro].sort((a, b) => b.population - a.population).slice(0, 6),
+      totalDentro: dentro.length,
+    };
+  }, [ciudadesPreview, elegida, radio, radioValido]);
 
   return (
     <div className="bg-white rounded-xl border border-(--brand) shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden">
@@ -572,7 +713,7 @@ function FormularioNueva({ onCrear, onCancelar, creando }: {
                 onChange={(e) => { setBusqueda(e.target.value); if (elegida) setElegida(null); }}
                 placeholder="Escribe una ciudad: Orlando, Bogotá, Madrid…"
                 autoComplete="off"
-                className="w-full pl-9 pr-9 py-2 text-sm border border-gray-200 rounded-lg bg-transparent text-gray-900 font-medium focus:outline-none focus:border-(--brand)"
+                className="w-full pl-9 pr-9 py-2 text-sm border border-gray-200 rounded-lg bg-transparent text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand)"
               />
               {elegida && (
                 <button onClick={limpiar} aria-label="Elegir otra ciudad"
@@ -623,7 +764,7 @@ function FormularioNueva({ onCrear, onCancelar, creando }: {
 
           <div>
             <label className="block text-xs font-semibold text-gray-500 mb-1">Radio</label>
-            <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-(--brand)">
+            <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-(--brand)/30 focus-within:border-(--brand)">
               <input
                 type="number"
                 step="1"
@@ -653,11 +794,43 @@ function FormularioNueva({ onCrear, onCancelar, creando }: {
             ))}
           </div>
         )}
+
+        {/* Cobertura estimada del radio elegido, misma pregunta que arriba
+            responde `TarjetaZona` una vez creada la zona. */}
+        {elegida && radioValido && (
+          <div className="pt-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
+              Cubriría
+            </p>
+            {coberturaPreview.dentro.length === 0 ? (
+              <p className="text-xs text-gray-500">
+                Ninguna ciudad del catálogo entra en el área con ese radio.
+              </p>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-1.5">
+                  {coberturaPreview.dentro.map((c) => (
+                    <span key={c.id} className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      {c.name}
+                    </span>
+                  ))}
+                </div>
+                {coberturaPreview.totalDentro > coberturaPreview.dentro.length && (
+                  <p className="text-[10px] text-gray-500 mt-1.5 tabular-nums">
+                    Las {coberturaPreview.dentro.length} más pobladas de {coberturaPreview.totalDentro} poblaciones dentro del área.
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-4">
         <p className="text-xs text-gray-500">
-          El identificador no se puede cambiar después: queda grabado en cada viaje de la zona.
+          {!valido
+            ? (!elegida ? 'Elige una ciudad del catálogo para continuar.' : 'Ingresa un radio mayor a 0 km.')
+            : 'El identificador no se puede cambiar después: queda grabado en cada viaje de la zona.'}
         </p>
         <button
           onClick={() => onCrear(f)}
@@ -684,6 +857,18 @@ export default function Zones() {
   const [borrando, setBorrando] = useState<string | null>(null);
   const [creando, setCreando] = useState(false);
   const [mostrarAlta, setMostrarAlta] = useState(false);
+  // Colapsadas por defecto: con la lista completa siempre expandida, cada
+  // tarjeta disparaba su propio fetch de ciudades cercanas al montar la
+  // pantalla, aunque nadie llegara a verla. Ver `useCiudadesCercanas`.
+  const [expandidas, setExpandidas] = useState<Set<string>>(new Set());
+
+  const alternarExpandida = (id: string) => {
+    setExpandidas((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   const cargar = useCallback(() => {
     setCargando(true);
@@ -816,6 +1001,11 @@ export default function Zones() {
   }
 
   const activas = zonas.filter((z) => z.active).length;
+  // Activas primero: son las que importan a diario. El resto, alfabético.
+  const zonasOrdenadas = [...zonas].sort((a, b) => {
+    if (a.active !== b.active) return a.active ? -1 : 1;
+    return a.name.localeCompare(b.name, 'es');
+  });
 
   return (
     <div className="space-y-5">
@@ -855,6 +1045,8 @@ export default function Zones() {
         </div>
       </div>
 
+      {zonas.length > 1 && <MapaGeneral zonas={zonas} />}
+
       {mostrarAlta && (
         <FormularioNueva onCrear={crear} onCancelar={() => setMostrarAlta(false)} creando={creando} />
       )}
@@ -867,7 +1059,7 @@ export default function Zones() {
           </p>
         </div>
       ) : (
-        zonas.map((z) => (
+        zonasOrdenadas.map((z) => (
           <TarjetaZona
             key={z.id}
             zona={z}
@@ -880,6 +1072,8 @@ export default function Zones() {
             cambiandoEstado={alternando === z.id}
             borrando={borrando === z.id}
             esUnicaActiva={z.active && activas === 1}
+            expandida={expandidas.has(z.id)}
+            onExpandir={() => alternarExpandida(z.id)}
           />
         ))
       )}

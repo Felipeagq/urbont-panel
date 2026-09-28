@@ -5,7 +5,7 @@ import { adminFetch } from '@/lib/api';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import {
   Search, MapPin, Car, RefreshCw, AlertTriangle,
-  ArrowRight, Clock, DollarSign, RotateCcw, X, CheckCircle2, CircleDashed
+  ArrowRight, Clock, DollarSign, RotateCcw, X, CheckCircle2, CircleDashed, Phone
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -265,7 +265,13 @@ export default function Rides() {
                   <Car className="w-5 h-5 text-(--brand)" />
                 </div>
                 <div>
-                  <h2 className="text-base font-bold text-gray-900 leading-tight">Detalle del viaje</h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-bold text-gray-900 leading-tight">Detalle del viaje</h2>
+                    {detailRide && (() => {
+                      const st = STATUS_CONFIG[detailRide.status] ?? { label: detailRide.status, class: 'bg-gray-50 text-gray-600 border-gray-200' };
+                      return <span className={`badge-sm ${st.class}`}>{st.label}</span>;
+                    })()}
+                  </div>
                   {detailRide && <p className="text-xs text-gray-400 mt-0.5">{formatDate(detailRide.createdAt)}</p>}
                 </div>
               </div>
@@ -287,15 +293,35 @@ export default function Rides() {
                 </div>
               ) : detailRide && detailMoney ? (
                 <>
+                  {/* Cancellation reason — lo primero que se pregunta un admin ante un viaje cancelado */}
+                  {detailRide.status === 'cancelled' && (detailRide.driverCancelReason || detailRide.cancelReason) && (
+                    <div className="bg-red-50 border border-red-100 rounded-xl p-3 text-sm text-red-700">
+                      <span className="font-medium">
+                        {detailRide.cancelledBy ? `Cancelado por ${CANCELLED_BY_LABELS[detailRide.cancelledBy]}: ` : 'Cancelado: '}
+                      </span>
+                      {cancelReasonLabel(String(detailRide.driverCancelReason || detailRide.cancelReason))}
+                    </div>
+                  )}
+
                   {/* Participants + route, same shape as the list */}
                   <div>
                     <div className="flex items-center gap-1.5 text-sm">
                       <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
                       <span className="font-medium text-gray-800">{detailRide.passengerName || '—'}</span>
+                      {detailRide.passengerPhone && (
+                        <span className="flex items-center gap-1 text-xs text-gray-500">
+                          <Phone className="w-3 h-3 text-gray-300 shrink-0" />{detailRide.passengerPhone}
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-1.5 text-sm mt-1">
                       <Car className="w-3 h-3 text-gray-400 shrink-0" />
                       <span className="text-gray-500">{detailRide.driverName || 'Sin asignar'}</span>
+                      {detailRide.driverPhone && (
+                        <span className="flex items-center gap-1 text-xs text-gray-500">
+                          <Phone className="w-3 h-3 text-gray-300 shrink-0" />{detailRide.driverPhone}
+                        </span>
+                      )}
                     </div>
                     <div className="mt-3 space-y-1">
                       <div className="flex items-start gap-1.5 text-xs">
@@ -322,7 +348,7 @@ export default function Rides() {
                         <span className="font-bold text-gray-900">{formatCurrency(detailMoney.cobradoAlPasajero)}</span>
                       </div>
                       <div className="flex items-center justify-between text-xs pl-3">
-                        <span className="text-gray-400">Tarifa base</span>
+                        <span className="text-gray-500">Tarifa base</span>
                         {/*
                           El recorrido, sin booking fee ni espera: las líneas de
                           debajo son las otras partes del mismo precio, y todas
@@ -334,7 +360,7 @@ export default function Rides() {
                       </div>
                       {detailMoney.bookingFee != null ? (
                         <div className="flex items-center justify-between text-xs pl-3">
-                          <span className="text-gray-400">Booking fee</span>
+                          <span className="text-gray-500">Booking fee</span>
                           <span className="text-gray-600">{formatCurrency(detailMoney.bookingFee)}</span>
                         </div>
                       ) : (
@@ -342,20 +368,20 @@ export default function Rides() {
                         // calculado del cliente, o anterior a esta columna): no
                         // se inventa un $0, se avisa que no se puede saber.
                         <div className="flex items-center justify-between text-xs pl-3">
-                          <span className="text-gray-300">Booking fee</span>
-                          <span className="text-gray-300 italic">Sin desglose disponible</span>
+                          <span className="text-gray-400">Booking fee</span>
+                          <span className="text-gray-400 italic">Sin desglose disponible</span>
                         </div>
                       )}
                       {/* La espera es parte del precio y entra en el reparto, no un cargo aparte. */}
                       {detailMoney.cargoEspera > 0 && (
                         <div className="flex items-center justify-between text-xs pl-3">
-                          <span className="text-gray-400">Cargo por espera</span>
+                          <span className="text-gray-500">Cargo por espera</span>
                           <span className="text-gray-600">{formatCurrency(detailMoney.cargoEspera)}</span>
                         </div>
                       )}
                       {detailMoney.impuesto > 0 && (
                         <div className="flex items-center justify-between text-xs pl-3">
-                          <span className="text-gray-400">Impuesto</span>
+                          <span className="text-gray-500">Impuesto</span>
                           <span className="text-gray-600">{formatCurrency(detailMoney.impuesto)}</span>
                         </div>
                       )}
@@ -441,7 +467,7 @@ export default function Rides() {
                     {/* Total que recibe el chofer: viaje + propina, si hubo */}
                     {detailMoney.propina > 0 && (
                       <div className="mt-2 flex items-center justify-between text-xs px-1">
-                        <span className="text-gray-400">Total recibido por el chofer</span>
+                        <span className="text-gray-600">Total recibido por el chofer</span>
                         <span className="font-semibold text-gray-700">{formatCurrency(detailMoney.gananciaChofer)}</span>
                       </div>
                     )}
@@ -451,13 +477,13 @@ export default function Rides() {
                       <div className="mt-3 space-y-1.5">
                         {detailMoney.cargoNoShow > 0 && (
                           <div className="flex items-center justify-between text-xs">
-                            <span className="text-gray-400">Cargo por no presentarse</span>
+                            <span className="text-gray-500">Cargo por no presentarse</span>
                             <span className="text-gray-600">{formatCurrency(detailMoney.cargoNoShow)}</span>
                           </div>
                         )}
                         {detailMoney.descuentoPromo > 0 && (
                           <div className="flex items-center justify-between text-xs">
-                            <span className="text-gray-400">Descuento promocional</span>
+                            <span className="text-gray-500">Descuento promocional</span>
                             <span className="text-red-500">−{formatCurrency(detailMoney.descuentoPromo)}</span>
                           </div>
                         )}
@@ -469,15 +495,15 @@ export default function Rides() {
                       {detailMoney.transferido ? (
                         <>
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                          <span className="text-gray-500">
+                          <span className="text-gray-600">
                             Transferido al chofer
-                            {detailMoney.transferId && <span className="text-gray-300"> · {detailMoney.transferId}</span>}
+                            {detailMoney.transferId && <span className="text-gray-500"> · {detailMoney.transferId}</span>}
                           </span>
                         </>
                       ) : (
                         <>
-                          <CircleDashed className="w-3.5 h-3.5 text-gray-300 shrink-0" />
-                          <span className="text-gray-400">Sin transferir todavía</span>
+                          <CircleDashed className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                          <span className="text-gray-500">Sin transferir todavía</span>
                         </>
                       )}
                     </div>
@@ -532,8 +558,16 @@ export default function Rides() {
                 return (
                   <div
                     key={ride.id}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => setDetailId(ride.id)}
-                    className="grid grid-cols-1 md:grid-cols-[1.5fr_2fr_1fr_1fr_80px] gap-2 md:gap-4 px-5 py-4 hover:bg-gray-50/70 transition-colors items-start md:items-center cursor-pointer"
+                    onKeyDown={e => {
+                      // Sólo cuando el foco está en la fila misma — si viene del
+                      // botón de reembolso anidado, dejamos que actúe él solo.
+                      if (e.target !== e.currentTarget) return;
+                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailId(ride.id); }
+                    }}
+                    className="grid grid-cols-1 md:grid-cols-[1.5fr_2fr_1fr_1fr_80px] gap-2 md:gap-4 px-5 py-4 hover:bg-gray-50/70 transition-colors items-start md:items-center cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-(--brand)/40 focus-visible:ring-inset"
                     data-testid={`row-ride-${ride.id}`}
                   >
 
