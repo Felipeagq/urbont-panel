@@ -6,7 +6,7 @@ import { formatRelativeTime } from '@/lib/utils';
 import {
   Server, Database, RefreshCw, CheckCircle2, XCircle, AlertCircle, MinusCircle,
   Cpu, MemoryStick, Shield, Settings, Search, Save, Loader2, Zap, Mail,
-  CreditCard, Map, Flame, MessageSquare, Network,
+  CreditCard, Map, Flame, MessageSquare, Network, Languages, Eye, EyeOff,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -112,6 +112,9 @@ const STARTUP_INTEGRATIONS = [
   // se verifica de verdad contra él (SendGrid /v3/scopes, Resend /domains,
   // SMTP verify()). Detecta una clave que autentica pero no puede enviar.
   { key: 'email', label: 'Email', icon: Mail },
+  // Traducción del chat chofer↔pasajero (OpenAI). Se re-verifica también al
+  // guardar una key nueva desde la tarjeta de abajo, no sólo al arrancar.
+  { key: 'translation', label: 'Traducción', icon: Languages },
 ] as const;
 
 const ACTION_COLORS: Record<string, string> = {
@@ -134,6 +137,14 @@ function actionColor(action: string) {
   return 'text-gray-600';
 }
 
+interface TranslationSettings {
+  configured: boolean;
+  maskedKey: string | null;
+  model: string;
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
 export default function System() {
   const [stats, setStats] = useState<SystemStats | null>(null);
   const [logs, setLogs] = useState<AuditLog[]>([]);
@@ -142,6 +153,12 @@ export default function System() {
   const [loading, setLoading] = useState(true);
   const [savingConfig, setSavingConfig] = useState<string | null>(null);
   const [logSearch, setLogSearch] = useState('');
+
+  const [translationCfg, setTranslationCfg] = useState<TranslationSettings | null>(null);
+  const [apiKeyDraft, setApiKeyDraft] = useState('');
+  const [modelDraft, setModelDraft] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [savingTranslation, setSavingTranslation] = useState(false);
 
   const [memHistory, setMemHistory] = useState<{ t: string; v: number }[]>([]);
   const [cpuHistory, setCpuHistory] = useState<{ t: string; v: number }[]>([]);
@@ -158,16 +175,19 @@ export default function System() {
 
   const loadData = useCallback(async () => {
     try {
-      const [s, l, c] = await Promise.all([
+      const [s, l, c, t] = await Promise.all([
         adminFetch('/system'),
         adminFetch('/audit-logs'),
         adminFetch('/config'),
+        adminFetch('/settings/translation'),
       ]);
       const mapped = mapSystemStats(s);
       setStats(mapped);
       setLogs(l.logs ?? []);
       setConfig(c.config ?? {});
       setLocalConfig(c.config ?? {});
+      setTranslationCfg(t);
+      setModelDraft(t.model ?? '');
       pushSamples(mapped);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Error al cargar el sistema');
@@ -204,6 +224,41 @@ export default function System() {
       toast.error(e instanceof Error ? e.message : 'Error al guardar');
     } finally {
       setSavingConfig(null);
+    }
+  };
+
+  const translationDirty = apiKeyDraft.trim() !== '' || modelDraft.trim() !== (translationCfg?.model ?? '');
+
+  const handleSaveTranslation = async () => {
+    setSavingTranslation(true);
+    try {
+      const body: Record<string, string> = {};
+      if (apiKeyDraft.trim()) body.apiKey = apiKeyDraft.trim();
+      if (modelDraft.trim() && modelDraft.trim() !== translationCfg?.model) body.model = modelDraft.trim();
+
+      const r = await adminFetch('/settings/translation', {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      });
+      setTranslationCfg(r);
+      setModelDraft(r.model ?? '');
+      setApiKeyDraft('');
+      setShowApiKey(false);
+      // Refleja el resultado de la verificación al instante, sin esperar los 15s de auto-refresh.
+      setStats(prev => prev ? {
+        ...prev,
+        integrations: { ...prev.integrations, translation: r.check },
+        apiStatus: { ...prev.apiStatus, translation: r.check?.status },
+      } : prev);
+      toast.success(
+        r.check?.status === 'connected'
+          ? 'Guardado — la traducción con OpenAI funciona'
+          : 'Guardado, pero no se pudo verificar la key: revisa la tarjeta de Traducción',
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo guardar la configuración de traducción');
+    } finally {
+      setSavingTranslation(false);
     }
   };
 
@@ -363,6 +418,71 @@ export default function System() {
             />
           ))}
         </div>
+      </div>
+
+      {/* Traducción del chat (OpenAI) — la key nunca se precarga, sólo se ve enmascarada */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 space-y-3">
+        <div className="flex items-center gap-2">
+          <Languages className="w-4 h-4 text-gray-400" />
+          <h2 className="text-sm font-semibold text-gray-800">Traducción de chat (OpenAI)</h2>
+        </div>
+        <p className="text-xs text-gray-500">
+          Traduce en tiempo real los mensajes entre chofer y pasajero. La API key se guarda cifrada
+          en el servidor; nunca se muestra completa una vez guardada.
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex-1 min-w-60">
+            <label className="block text-xs font-semibold text-gray-500 mb-1">API key de OpenAI</label>
+            <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-(--brand)/30 focus-within:border-(--brand)">
+              <input
+                type={showApiKey ? 'text' : 'password'}
+                value={apiKeyDraft}
+                onChange={e => setApiKeyDraft(e.target.value)}
+                placeholder={translationCfg?.configured ? translationCfg.maskedKey ?? 'Configurada' : 'sk-...'}
+                autoComplete="off"
+                className="flex-1 w-full px-3 py-2 text-sm bg-transparent text-gray-900 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setShowApiKey(s => !s)}
+                className="px-2.5 text-gray-400 hover:text-gray-600"
+                aria-label={showApiKey ? 'Ocultar' : 'Mostrar'}
+              >
+                {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <p className="text-[10px] text-gray-500 mt-1">
+              {translationCfg?.configured
+                ? `Configurada (${translationCfg.maskedKey}). Escribe una nueva para reemplazarla.`
+                : 'Sin configurar — el chat no traduce.'}
+            </p>
+          </div>
+
+          <div className="w-44">
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Modelo</label>
+            <input
+              type="text"
+              value={modelDraft}
+              onChange={e => setModelDraft(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-transparent text-gray-900 focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand)"
+            />
+          </div>
+
+          <button
+            onClick={handleSaveTranslation}
+            disabled={savingTranslation || !translationDirty}
+            className="btn-primary flex items-center gap-2 text-xs disabled:opacity-50 disabled:cursor-not-allowed h-9.5"
+          >
+            {savingTranslation ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            Guardar
+          </button>
+        </div>
+        {translationCfg?.updatedBy && (
+          <p className="text-[10px] text-gray-400">
+            Última actualización por {translationCfg.updatedBy}
+            {translationCfg.updatedAt ? ` · ${hace(translationCfg.updatedAt)}` : ''}
+          </p>
+        )}
       </div>
 
       {/* Charts */}
