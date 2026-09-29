@@ -401,7 +401,13 @@ export default function System() {
           <h2 className="text-sm font-semibold text-gray-800">Integraciones externas</h2>
           <p className="text-[11px] text-gray-400">Verificadas al arrancar el servidor</p>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {/*
+          Tres columnas, como el grid de runtime de arriba: son seis
+          integraciones, así que quedan en 3 × 2. Con seis en una fila cada
+          tarjeta era tan estrecha que el estado se cortaba a media palabra
+          ("Cobros habilita…", "verificado al ini…"), justo lo que hay que leer.
+        */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {STARTUP_INTEGRATIONS.map(({ key, label, icon }) => (
             <IntegrationCard
               key={key}
@@ -420,19 +426,21 @@ export default function System() {
         </div>
       </div>
 
-      {/* Traducción del chat (OpenAI) — la key nunca se precarga, sólo se ve enmascarada */}
+      {/* Traducción del chat (OpenAI) — la key nunca se precarga, sólo se ve enmascarada.
+          Mismo patrón visual que las tarjetas de Comisión/Impuesto en fares/page.tsx:
+          label+input agrupados, botón de guardar y el texto de estado al final de la fila. */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 space-y-3">
         <div className="flex items-center gap-2">
-          <Languages className="w-4 h-4 text-gray-400" />
-          <h2 className="text-sm font-semibold text-gray-800">Traducción de chat (OpenAI)</h2>
+          <Languages className="w-4 h-4 text-(--brand)" />
+          <h2 className="text-sm font-bold text-gray-900">Traducción de chat (OpenAI)</h2>
         </div>
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-gray-500 leading-relaxed">
           Traduce en tiempo real los mensajes entre chofer y pasajero. Una vez guardada, la API key
           nunca se vuelve a mostrar completa en el panel.
         </p>
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex-1 min-w-60">
-            <label className="block text-xs font-semibold text-gray-500 mb-1">API key de OpenAI</label>
+        <div className="flex items-end gap-3 flex-wrap">
+          <label className="text-xs text-gray-500 space-y-1 flex-1 min-w-72">
+            <span>API key de OpenAI</span>
             <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-(--brand)/30 focus-within:border-(--brand)">
               <input
                 type={showApiKey ? 'text' : 'password'}
@@ -451,38 +459,47 @@ export default function System() {
                 {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
-            <p className="text-[10px] text-gray-500 mt-1">
-              {translationCfg?.configured
-                ? `Configurada (${translationCfg.maskedKey}). Escribe una nueva para reemplazarla.`
-                : 'Sin configurar — el chat no traduce.'}
-            </p>
-          </div>
+          </label>
 
-          <div className="w-44">
-            <label className="block text-xs font-semibold text-gray-500 mb-1">Modelo</label>
+          <label className="text-xs text-gray-500 space-y-1">
+            <span>Modelo</span>
             <input
               type="text"
               value={modelDraft}
               onChange={e => setModelDraft(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-transparent text-gray-900 focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand)"
+              className="block w-36 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-transparent text-gray-900 focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand)"
             />
-          </div>
+          </label>
 
           <button
             onClick={handleSaveTranslation}
             disabled={savingTranslation || !translationDirty}
-            className="btn-primary flex items-center gap-2 text-xs disabled:opacity-50 disabled:cursor-not-allowed h-9.5"
+            className="btn-primary flex items-center gap-2 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {savingTranslation ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
             Guardar
           </button>
         </div>
-        {translationCfg?.updatedBy && (
-          <p className="text-[10px] text-gray-400">
-            Última actualización por {translationCfg.updatedBy}
-            {translationCfg.updatedAt ? ` · ${hace(translationCfg.updatedAt)}` : ''}
-          </p>
-        )}
+
+        {/*
+          El estado va en su propia línea, no al final de la fila de controles:
+          es información, y compitiendo por el espacio con los inputs acababa
+          donde el wrap lo dejara. El punto de color lo hace legible de un
+          vistazo, igual que en las tarjetas de integraciones.
+        */}
+        <div className="flex items-center gap-2 pt-3 border-t border-gray-50 text-xs">
+          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${translationCfg?.configured ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+          {translationCfg?.configured ? (
+            <p className="text-gray-500">
+              Configurada
+              {translationCfg.updatedBy && <> · por {translationCfg.updatedBy}</>}
+              {/* `hace()` ya devuelve "hace 12 min": anteponer otro "hace" daba "hace hace 12 min". */}
+              {translationCfg.updatedAt && <span className="text-gray-400"> {hace(translationCfg.updatedAt)}</span>}
+            </p>
+          ) : (
+            <p className="text-gray-400">Sin configurar — el chat no traduce.</p>
+          )}
+        </div>
       </div>
 
       {/* Charts */}
