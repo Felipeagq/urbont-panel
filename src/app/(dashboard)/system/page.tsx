@@ -427,8 +427,8 @@ export default function System() {
           <h2 className="text-sm font-semibold text-gray-800">Traducción de chat (OpenAI)</h2>
         </div>
         <p className="text-xs text-gray-500">
-          Traduce en tiempo real los mensajes entre chofer y pasajero. La API key se guarda cifrada
-          en el servidor; nunca se muestra completa una vez guardada.
+          Traduce en tiempo real los mensajes entre chofer y pasajero. Una vez guardada, la API key
+          nunca se vuelve a mostrar completa en el panel.
         </p>
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex-1 min-w-60">
