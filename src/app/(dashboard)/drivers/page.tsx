@@ -55,7 +55,7 @@ interface Driver {
   needsReview?: boolean;
   documentsExpired?: number;
   documentsExpiringSoon?: number;
-  /** Documentos sin fecha: el cron de caducidad no los vigila. */
+  /** Sin fecha. No es una incidencia: la caducidad es opcional por diseño. */
   documentsWithoutExpiry?: number;
   documentsNextExpiry?: string | null;
 
@@ -266,10 +266,6 @@ export default function Drivers() {
     return matchSearch && matchStatus;
   });
 
-  // Punto ciego del control automático: el cron sólo mira documentos con fecha.
-  const sinVigilancia = drivers.reduce((n, d) => n + (d.documentsWithoutExpiry ?? 0), 0);
-  const conductoresSinVigilancia = drivers.filter(d => (d.documentsWithoutExpiry ?? 0) > 0).length;
-
   const counts = {
     all: drivers.length,
     active: drivers.filter(d => d.status === 'active').length,
@@ -346,20 +342,6 @@ export default function Drivers() {
         </div>
       ) : (
         <>
-        {/* El cron de caducidad sólo mira documentos con fecha, así que los que
-            no la tienen vencen sin que nadie se entere. Es un punto ciego del
-            sistema, no la incidencia de un conductor concreto: va arriba y una
-            sola vez. */}
-        {sinVigilancia > 0 && (
-          <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>
-              <strong>{sinVigilancia} documento{sinVigilancia === 1 ? '' : 's'} sin fecha de caducidad</strong>
-              {' '}en {conductoresSinVigilancia} conductor{conductoresSinVigilancia === 1 ? '' : 'es'}.
-              El control automático los ignora, así que pueden vencer sin aviso.
-            </span>
-          </div>
-        )}
         <div className="bg-white rounded-xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden">
           {/* Table head */}
           <div className="grid grid-cols-[2fr_1.5fr_1fr_1fr_80px] gap-4 px-5 py-3 bg-gray-50 border-b border-gray-100 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
