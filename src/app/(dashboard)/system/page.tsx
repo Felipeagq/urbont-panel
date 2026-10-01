@@ -145,6 +145,17 @@ interface TranslationSettings {
   updatedAt?: string;
 }
 
+/**
+ * Claves que tienen su propia pantalla y su propia validación. Aquí se editaban
+ * como texto libre, sin rango ni formato, y eso pisaba lo que esas pantallas
+ * guardan: el recargo por demanda vive en Tarifas, y las tarifas, comisión e
+ * impuesto son JSON que no se teclean a mano.
+ */
+const CLAVES_CON_DUENO = new Set([
+  'surge_config', 'surge_multiplier', 'surge_reason',
+  'fares_config', 'commission_config', 'tax_config', 'translation_config',
+]);
+
 export default function System() {
   const [stats, setStats] = useState<SystemStats | null>(null);
   const [logs, setLogs] = useState<AuditLog[]>([]);
@@ -613,10 +624,10 @@ export default function System() {
             <h2 className="text-sm font-semibold text-gray-800">Configuración</h2>
           </div>
           <div className="p-4 space-y-4 overflow-auto max-h-[400px]">
-            {Object.keys(localConfig).length === 0 ? (
+            {Object.keys(localConfig).filter(k => !CLAVES_CON_DUENO.has(k)).length === 0 ? (
               <p className="text-xs text-gray-400 text-center py-4">Sin parámetros de configuración</p>
             ) : (
-              Object.entries(localConfig).map(([key, val]) => {
+              Object.entries(localConfig).filter(([key]) => !CLAVES_CON_DUENO.has(key)).map(([key, val]) => {
                 const isDirty = val !== config[key];
                 return (
                   <div key={key}>

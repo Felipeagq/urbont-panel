@@ -7,6 +7,7 @@ import {
   Car, CarFront, Truck, ShieldCheck, Percent, type LucideIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import SurgeCard from './SurgeCard';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   estimarPorDistancia, estimarPorHora,
@@ -274,6 +275,11 @@ export default function Fares() {
           </div>
         </div>
       )}
+
+      {/* El recargo por demanda va aquí arriba a propósito: la vista previa de
+          más abajo dice "sin recargo por demanda", y esa advertencia sólo se
+          entiende si el multiplicador vigente se ve antes. */}
+      <SurgeCard />
 
       {/* Vehicle class tabs */}
       <div className="flex gap-2 flex-wrap">
