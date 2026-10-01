@@ -5,7 +5,7 @@ import { adminFetch } from '@/lib/api';
 import { formatDate, actionTookEffect, formatUrbontId, normalizarIdBusqueda } from '@/lib/utils';
 import {
   Search, Car, Star, Shield, CheckCircle2,
-  Phone, ChevronDown, ChevronUp, RefreshCw, UserX, AlertTriangle, Hash, ExternalLink, Loader2, CreditCard
+  Phone, ChevronDown, ChevronUp, RefreshCw, UserX, AlertTriangle, Hash, ExternalLink, Loader2, CreditCard, Clock
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -48,6 +48,16 @@ interface Driver {
   hasVehicle: boolean;
   createdAt: string;
   suspensionReason?: string;
+
+  /** Online de verdad, que es otra cosa que estar habilitado para trabajar. */
+  presence?: 'online' | 'offline';
+  /** La bandera que levanta el cron al caducar un documento. */
+  needsReview?: boolean;
+  documentsExpired?: number;
+  documentsExpiringSoon?: number;
+  /** Documentos sin fecha: el cron de caducidad no los vigila. */
+  documentsWithoutExpiry?: number;
+  documentsNextExpiry?: string | null;
 
   // Estado de documentos: el campo que debe usarse en la UI
   documentsState: 'aprobado' | 'pendiente' | 'rechazado' | 'sin_documentos';
@@ -256,6 +266,10 @@ export default function Drivers() {
     return matchSearch && matchStatus;
   });
 
+  // Punto ciego del control automático: el cron sólo mira documentos con fecha.
+  const sinVigilancia = drivers.reduce((n, d) => n + (d.documentsWithoutExpiry ?? 0), 0);
+  const conductoresSinVigilancia = drivers.filter(d => (d.documentsWithoutExpiry ?? 0) > 0).length;
+
   const counts = {
     all: drivers.length,
     active: drivers.filter(d => d.status === 'active').length,
@@ -331,6 +345,21 @@ export default function Drivers() {
           <p className="text-sm">{error}</p>
         </div>
       ) : (
+        <>
+        {/* El cron de caducidad sólo mira documentos con fecha, así que los que
+            no la tienen vencen sin que nadie se entere. Es un punto ciego del
+            sistema, no la incidencia de un conductor concreto: va arriba y una
+            sola vez. */}
+        {sinVigilancia > 0 && (
+          <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              <strong>{sinVigilancia} documento{sinVigilancia === 1 ? '' : 's'} sin fecha de caducidad</strong>
+              {' '}en {conductoresSinVigilancia} conductor{conductoresSinVigilancia === 1 ? '' : 'es'}.
+              El control automático los ignora, así que pueden vencer sin aviso.
+            </span>
+          </div>
+        )}
         <div className="bg-white rounded-xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden">
           {/* Table head */}
           <div className="grid grid-cols-[2fr_1.5fr_1fr_1fr_80px] gap-4 px-5 py-3 bg-gray-50 border-b border-gray-100 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
@@ -404,7 +433,32 @@ export default function Drivers() {
 
                       {/* Status badge */}
                       <div className="space-y-1">
-                        <span className={`badge-sm ${st.class}`}>{st.label}</span>
+                        <span className={`badge-sm ${st.class}`} title={driver.needsReview ? 'Suspendido por documento caducado' : undefined}>
+                          {st.label}
+                        </span>
+                        {/* El cron suspende al caducar un documento, pero el panel
+                            no decía por qué: un "Suspendido" a secas no se puede
+                            accionar sin ir a buscar la causa a mano. */}
+                        {driver.needsReview && (
+                          <span className="badge-sm flex w-fit items-center gap-1 border border-red-200 bg-red-50 text-red-700">
+                            <AlertTriangle className="h-3 w-3" /> Documento caducado
+                          </span>
+                        )}
+                        {!driver.needsReview && (driver.documentsExpired ?? 0) > 0 && (
+                          <span className="badge-sm flex w-fit items-center gap-1 border border-red-200 bg-red-50 text-red-700">
+                            <AlertTriangle className="h-3 w-3" />
+                            {driver.documentsExpired} vencido{driver.documentsExpired === 1 ? '' : 's'}
+                          </span>
+                        )}
+                        {!driver.needsReview && (driver.documentsExpired ?? 0) === 0 && (driver.documentsExpiringSoon ?? 0) > 0 && (
+                          <span
+                            className="badge-sm flex w-fit items-center gap-1 border border-amber-200 bg-amber-50 text-amber-700"
+                            title={driver.documentsNextExpiry ? `El próximo vence el ${driver.documentsNextExpiry}` : undefined}
+                          >
+                            <Clock className="h-3 w-3" />
+                            Vence pronto
+                          </span>
+                        )}
                         {/* Pagos: sin cuenta de Stripe, un viaje suyo no le transfiere nada. */}
                         <span
                           className={`badge-sm flex items-center gap-1 w-fit ${
@@ -603,6 +657,7 @@ export default function Drivers() {
             </div>
           )}
         </div>
+        </>
       )}
     </div>
 
