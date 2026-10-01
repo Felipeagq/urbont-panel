@@ -44,7 +44,17 @@ export function removeUser() {
 
 const API_BASE = '/api/admin';
 
-export async function adminFetch(endpoint: string, options: RequestInit = {}): Promise<any> {
+/**
+ * Igual que `adminFetch` pero contra `/api/<ruta>` en vez de `/api/admin/<ruta>`.
+ * Algunos endpoints protegidos por el JWT de admin viven fuera del router de
+ * admin —`/api/notifications/broadcast` entre ellos— y `adminFetch` les
+ * antepondría un `/admin` que no existe.
+ */
+export async function apiFetch(endpoint: string, options: RequestInit = {}): Promise<any> {
+  return adminFetch(endpoint, options, '/api');
+}
+
+export async function adminFetch(endpoint: string, options: RequestInit = {}, base: string = API_BASE): Promise<any> {
   const token = getToken();
   
   const headers = new Headers(options.headers);
@@ -53,7 +63,7 @@ export async function adminFetch(endpoint: string, options: RequestInit = {}): P
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(`${API_BASE}${endpoint}`, {
+  const response = await fetch(`${base}${endpoint}`, {
     ...options,
     headers,
   });
