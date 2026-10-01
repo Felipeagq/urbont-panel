@@ -4,12 +4,39 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { adminFetch, apiFetch } from '@/lib/api';
 import {
   Bell, Send, Users, Car, Search, X, RefreshCw, AlertTriangle, CheckCircle2,
+  Inbox, ChevronLeft, ChevronRight, BookOpen, Zap, ZapOff,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { formatRelativeTime } from '@/lib/utils';
 
 type Audience = 'all' | 'passengers' | 'drivers' | 'valets';
 type Platform = 'all' | 'ios' | 'android' | 'web';
 type Mode = 'audience' | 'users';
+type Tab = 'send' | 'history' | 'catalog';
+
+interface CatalogEntry {
+  key: string;
+  audience: 'passenger' | 'driver' | 'chat';
+  title: string;
+  body: string;
+  type: string | null;
+  screen: string | null;
+  trigger: string;
+  /** 'template': usa esta plantilla · 'inline': se envía con texto propio · 'none': nunca se envía. */
+  status: 'template' | 'inline' | 'none';
+  sentFrom: string | null;
+}
+
+interface HistoryItem {
+  id: string;
+  userId: string | null;
+  userName: string;
+  title: string;
+  body: string;
+  type: string | null;
+  read: boolean;
+  createdAt: string;
+}
 
 interface TokenStats { total: number; ios: number; android: number; web: number }
 /** Campos que comparten `/admin/drivers` y `/admin/passengers`. */
@@ -58,6 +85,16 @@ export default function NotificationsPage() {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<Person[]>([]);
 
+  const [tab, setTab] = useState<Tab>('send');
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyPage, setHistoryPage] = useState(0);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
+  const [loadingCatalog, setLoadingCatalog] = useState(false);
+  const [catalogFilter, setCatalogFilter] = useState<'all' | 'passenger' | 'driver' | 'chat'>('all');
+
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<SendResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +109,32 @@ export default function NotificationsPage() {
   }, []);
 
   useEffect(() => { void loadStats(); }, [loadStats]);
+
+  const PAGE_SIZE = 25;
+
+  const loadHistory = useCallback((page: number) => {
+    setLoadingHistory(true);
+    return apiFetch(`/notifications/all?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`)
+      .then((d: { notifications: HistoryItem[]; total: number }) => {
+        setHistory(d.notifications ?? []);
+        setHistoryTotal(d.total ?? 0);
+      })
+      .catch(() => { setHistory([]); setHistoryTotal(0); })
+      .finally(() => setLoadingHistory(false));
+  }, []);
+
+  useEffect(() => {
+    if (tab === 'history') void loadHistory(historyPage);
+  }, [tab, historyPage, loadHistory]);
+
+  useEffect(() => {
+    if (tab !== 'catalog' || catalog.length > 0 || loadingCatalog) return;
+    setLoadingCatalog(true);
+    apiFetch('/notifications/catalog')
+      .then((d: { catalog: CatalogEntry[] }) => setCatalog(d.catalog ?? []))
+      .catch(() => setCatalog([]))
+      .finally(() => setLoadingCatalog(false));
+  }, [tab, catalog.length, loadingCatalog]);
 
   // Las personas sólo se cargan al elegir el modo de selección manual: son dos
   // listados completos y no hacen falta para un envío por audiencia.
@@ -165,6 +228,27 @@ export default function NotificationsPage() {
         </button>
       </div>
 
+      {/* Pestañas */}
+      <div className="flex gap-1 border-b border-gray-200">
+        {([
+          { id: 'send'    as Tab, label: 'Enviar',    icon: Send },
+          { id: 'history' as Tab, label: 'Historial', icon: Inbox },
+          { id: 'catalog' as Tab, label: 'Tipos',     icon: BookOpen },
+        ]).map(t => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium ${
+              tab === t.id
+                ? 'border-gray-900 text-gray-900'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <t.icon className="h-4 w-4" /> {t.label}
+          </button>
+        ))}
+      </div>
+
       {/* Dispositivos alcanzables */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {loadingStats || !stats ? (
@@ -179,6 +263,7 @@ export default function NotificationsPage() {
         )}
       </div>
 
+      {tab === 'send' && (<>
       {stats && stats.total === 0 && (
         <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -429,6 +514,195 @@ export default function NotificationsPage() {
           </div>
         </div>
       </div>
+      </>)}
+
+      {tab === 'history' && (
+        <div className="rounded-xl border border-gray-200 bg-white">
+          <div className="flex items-center justify-between border-b border-gray-200 px-5 py-3">
+            <p className="text-sm font-semibold text-gray-900">
+              Historial{historyTotal > 0 && <span className="ml-2 font-normal text-gray-400">{historyTotal.toLocaleString()}</span>}
+            </p>
+            <button
+              onClick={() => void loadHistory(historyPage)}
+              className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-900"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loadingHistory ? 'animate-spin' : ''}`} /> Actualizar
+            </button>
+          </div>
+
+          {loadingHistory ? (
+            <div className="space-y-2 p-5">
+              {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-12" />)}
+            </div>
+          ) : history.length === 0 ? (
+            <p className="p-10 text-center text-sm text-gray-400">
+              Todavía no se ha enviado ninguna notificación.
+            </p>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 text-left text-xs uppercase tracking-wide text-gray-500">
+                      <th className="px-5 py-2 font-medium">Mensaje</th>
+                      <th className="px-5 py-2 font-medium">Destinatario</th>
+                      <th className="px-5 py-2 font-medium">Tipo</th>
+                      <th className="px-5 py-2 font-medium">Estado</th>
+                      <th className="px-5 py-2 font-medium">Enviada</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.map(n => (
+                      <tr key={n.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50">
+                        <td className="max-w-md px-5 py-3">
+                          <p className="truncate font-medium text-gray-900">{n.title}</p>
+                          <p className="truncate text-xs text-gray-500">{n.body}</p>
+                        </td>
+                        <td className="whitespace-nowrap px-5 py-3 text-gray-600">{n.userName}</td>
+                        <td className="px-5 py-3">
+                          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                            {n.type ?? '—'}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap px-5 py-3 text-xs">
+                          {n.read
+                            ? <span className="text-gray-400">Leída</span>
+                            : <span className="font-medium text-gray-900">Sin leer</span>}
+                        </td>
+                        <td className="whitespace-nowrap px-5 py-3 text-xs text-gray-500">
+                          {formatRelativeTime(n.createdAt)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3 text-xs text-gray-500">
+                <span>
+                  {historyPage * PAGE_SIZE + 1}–{Math.min((historyPage + 1) * PAGE_SIZE, historyTotal)} de {historyTotal.toLocaleString()}
+                </span>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setHistoryPage(p => Math.max(0, p - 1))}
+                    disabled={historyPage === 0}
+                    className="rounded-lg border border-gray-200 p-1.5 disabled:opacity-30"
+                    aria-label="Anterior"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => setHistoryPage(p => p + 1)}
+                    disabled={(historyPage + 1) * PAGE_SIZE >= historyTotal}
+                    className="rounded-lg border border-gray-200 p-1.5 disabled:opacity-30"
+                    aria-label="Siguiente"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {tab === 'catalog' && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex gap-1.5">
+              {([
+                { v: 'all'       as const, label: 'Todas' },
+                { v: 'passenger' as const, label: 'Pasajero' },
+                { v: 'driver'    as const, label: 'Conductor' },
+                { v: 'chat'      as const, label: 'Chat' },
+              ]).map(f => (
+                <button
+                  key={f.v}
+                  onClick={() => setCatalogFilter(f.v)}
+                  className={`rounded-lg border px-3 py-1.5 text-xs ${
+                    catalogFilter === f.v
+                      ? 'border-gray-900 bg-gray-900 font-medium text-white'
+                      : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            {catalog.length > 0 && (
+              <p className="text-xs text-gray-500">
+                {catalog.filter(c => c.status === 'template').length} con plantilla ·{' '}
+                {catalog.filter(c => c.status === 'inline').length} con texto propio ·{' '}
+                {catalog.filter(c => c.status === 'none').length} nunca se envían
+              </p>
+            )}
+          </div>
+
+          <div className="flex items-start gap-2 rounded-xl border border-gray-200 bg-gray-50 p-4 text-xs text-gray-600">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
+            <span>
+              <strong>Con plantilla</strong>: se envía con este texto.{' '}
+              <strong>Texto propio</strong>: la notificación sí llega, pero el mensaje está
+              escrito a mano donde se envía, así que el usuario lee otras palabras.{' '}
+              <strong>Nunca se envía</strong>: está definida y no la dispara nadie.
+            </span>
+          </div>
+
+          {loadingCatalog ? (
+            <div className="space-y-2">
+              {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
+            </div>
+          ) : (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {catalog
+                .filter(c => catalogFilter === 'all' || c.audience === catalogFilter)
+                .map(c => (
+                  <div
+                    key={`${c.audience}-${c.key}`}
+                    className="rounded-xl border border-gray-200 bg-white p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-gray-900">{c.title}</p>
+                        <p className="mt-0.5 text-sm text-gray-600">{c.body}</p>
+                      </div>
+                      <span
+                        className={`flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs ${
+                          c.status === 'template' ? 'bg-emerald-50 text-emerald-700'
+                          : c.status === 'inline' ? 'bg-sky-50 text-sky-700'
+                          : 'bg-amber-50 text-amber-700'
+                        }`}
+                      >
+                        {c.status === 'none' ? <ZapOff className="h-3 w-3" /> : <Zap className="h-3 w-3" />}
+                        {c.status === 'template' ? 'Con plantilla'
+                          : c.status === 'inline' ? 'Texto propio'
+                          : 'Nunca se envía'}
+                      </span>
+                    </div>
+
+                    <p className="mt-3 text-xs text-gray-500">
+                      <span className="font-medium text-gray-700">Se activa:</span> {c.trigger}
+                    </p>
+
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+                      <span className="rounded bg-gray-100 px-1.5 py-0.5 text-gray-600">
+                        {c.audience === 'passenger' ? 'Pasajero' : c.audience === 'driver' ? 'Conductor' : 'Chat'}
+                      </span>
+                      {c.type && (
+                        <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-gray-500">
+                          {c.type}
+                        </span>
+                      )}
+                      {c.sentFrom && (
+                        <span className="font-mono text-gray-400">{c.sentFrom}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
