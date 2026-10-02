@@ -16,6 +16,8 @@ interface Document {
   id: string;
   driverId: string;
   driverName: string;
+  /** Los valets suben documentos igual que los conductores; el rol los distingue. */
+  role: 'driver' | 'valet';
   docType: string;
   status: 'pending' | 'approved' | 'rejected';
   uploadedAt: string;
@@ -28,6 +30,11 @@ const STATUS_CONFIG = {
   pending:  { label: 'Pendiente', class: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' },
   approved: { label: 'Aprobado',  class: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
   rejected: { label: 'Rechazado', class: 'bg-red-50 text-red-700 border-red-200', dot: 'bg-red-500' },
+};
+
+const ROLE_CONFIG = {
+  driver: { label: 'Conductor', class: 'bg-blue-50 text-blue-700 border-blue-200' },
+  valet:  { label: 'Valet',     class: 'bg-violet-50 text-violet-700 border-violet-200' },
 };
 
 const DOC_TYPES: Record<string, string> = {
@@ -59,7 +66,11 @@ const DOC_TYPES: Record<string, string> = {
   defensiveDriving:    'Certificado de manejo defensivo',
 };
 
-function docTypeLabel(t: string) { return DOC_TYPES[t] ?? t; }
+// Para un valet, `license` es su documento oficial (ID, licencia o pasaporte), no una licencia de conducir.
+const DOC_TYPES_VALET: Record<string, string> = { license: 'Documento de identidad' };
+function docTypeLabel(t: string, role?: 'driver' | 'valet') {
+  return (role === 'valet' ? DOC_TYPES_VALET[t] : undefined) ?? DOC_TYPES[t] ?? t;
+}
 
 const AVATAR_PALETTE = [
   'bg-blue-100 text-blue-700', 'bg-violet-100 text-violet-700', 'bg-emerald-100 text-emerald-700',
@@ -79,6 +90,7 @@ interface DriverGroup {
   driverName: string;
   /** Para identificarlo aunque no tenga nombre: el mismo id que ve en su cuenta. */
   driverId: string;
+  role: 'driver' | 'valet';
   docs: Document[];
   pending: number;
   approved: number;
@@ -100,6 +112,7 @@ function groupByDriver(docs: Document[]): DriverGroup[] {
         key,
         driverName: d.driverName || 'Conductor sin nombre',
         driverId: d.driverId || '',
+        role: d.role,
         docs: [], pending: 0, approved: 0, rejected: 0,
       };
       map.set(key, g);
@@ -120,6 +133,7 @@ export default function Documents() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | Document['status']>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [roleFilter, setRoleFilter] = useState<'all' | Document['role']>('all');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [rejectTarget, setRejectTarget] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
@@ -145,6 +159,7 @@ export default function Documents() {
         id: d.id,
         driverId: d.driverId,
         driverName: d.driverName,
+        role: d.driverRole === 'valet' ? 'valet' : 'driver',
         docType: d.type,
         status: d.status === 'valid' ? 'approved' : d.status,
         uploadedAt: d.uploadDate,
@@ -204,7 +219,8 @@ export default function Documents() {
     const matchSearch = d.driverName.toLowerCase().includes(q) || docTypeLabel(d.docType).toLowerCase().includes(q);
     const matchStatus = statusFilter === 'all' || d.status === statusFilter;
     const matchType = typeFilter === 'all' || d.docType === typeFilter;
-    return matchSearch && matchStatus && matchType;
+    const matchRole = roleFilter === 'all' || d.role === roleFilter;
+    return matchSearch && matchStatus && matchType && matchRole;
   });
 
   const counts = {
@@ -331,7 +347,7 @@ export default function Documents() {
         <div
           role={doc.fileUrl ? 'button' : undefined}
           tabIndex={doc.fileUrl ? 0 : undefined}
-          aria-label={doc.fileUrl ? `Ver documento ampliado: ${docTypeLabel(doc.docType)}` : undefined}
+          aria-label={doc.fileUrl ? `Ver documento ampliado: ${docTypeLabel(doc.docType, doc.role)}` : undefined}
           onClick={() => doc.fileUrl && setPreview(doc)}
           onKeyDown={e => {
             if (!doc.fileUrl) return;
@@ -375,11 +391,12 @@ export default function Documents() {
         <div className="p-4 flex-1 flex flex-col">
           <div className="flex items-start justify-between gap-2 mb-3">
             <div>
-              <h3 className="text-sm font-semibold text-gray-900">{docTypeLabel(doc.docType)}</h3>
+              <h3 className="text-sm font-semibold text-gray-900">{docTypeLabel(doc.docType, doc.role)}</h3>
               {/* En vista agrupada el conductor ya está en la cabecera del grupo */}
               {!grouped && (
                 <div className="flex items-center gap-1.5 text-xs text-gray-500 mt-0.5">
                   <User className="w-3 h-3" /> {doc.driverName}
+                  <span className={`badge-sm ml-1 ${ROLE_CONFIG[doc.role].class}`}>{ROLE_CONFIG[doc.role].label}</span>
                 </div>
               )}
             </div>
@@ -455,6 +472,22 @@ export default function Documents() {
           ))}
         </div>
 
+        {/* Role filter */}
+        <div className="flex gap-1 rounded-lg bg-gray-100 p-0.5 text-xs">
+          {(['all', 'driver', 'valet'] as const).map(r => (
+            <button
+              key={r}
+              onClick={() => setRoleFilter(r)}
+              className={`px-2.5 py-1 rounded-md font-medium transition-all ${
+                roleFilter === r ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {r === 'all' ? 'Todos' : ROLE_CONFIG[r].label + 's'}
+              <span className="ml-1 text-gray-400">{r === 'all' ? documents.length : documents.filter(d => d.role === r).length}</span>
+            </button>
+          ))}
+        </div>
+
         {/* Type filter */}
         <select
           value={typeFilter}
@@ -470,7 +503,7 @@ export default function Documents() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
           <input
             type="search"
-            placeholder="Buscar conductor..."
+            placeholder="Buscar conductor o valet..."
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="w-full pl-8 pr-4 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand) transition-all"
@@ -551,7 +584,10 @@ export default function Documents() {
                     {getInitials(g.driverName)}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-900 truncate">{g.driverName}</p>
+                    <p className="text-sm font-semibold text-gray-900 truncate">
+                      {g.driverName}
+                      <span className={`badge-sm ml-2 align-middle ${ROLE_CONFIG[g.role].class}`}>{ROLE_CONFIG[g.role].label}</span>
+                    </p>
                     <p className="text-xs text-gray-400">
                       {g.docs.length} {g.docs.length === 1 ? 'documento' : 'documentos'}
                       {g.driverId && (
@@ -604,7 +640,7 @@ export default function Documents() {
             onClick={() => setPreview(null)}
             role="dialog"
             aria-modal="true"
-            aria-label={`Detalle del documento: ${docTypeLabel(preview.docType)}`}
+            aria-label={`Detalle del documento: ${docTypeLabel(preview.docType, preview.role)}`}
           >
             <div
               className="w-full max-w-4xl max-h-[90vh] grid grid-cols-1 md:grid-cols-[1fr_300px] bg-white rounded-xl overflow-hidden"
@@ -618,7 +654,7 @@ export default function Documents() {
               {/* Info + actions panel */}
               <div className="p-5 flex flex-col overflow-y-auto">
                 <div className="flex items-start justify-between gap-2 mb-1">
-                  <h3 className="text-sm font-semibold text-gray-900">{docTypeLabel(preview.docType)}</h3>
+                  <h3 className="text-sm font-semibold text-gray-900">{docTypeLabel(preview.docType, preview.role)}</h3>
                   <button
                     autoFocus
                     onClick={() => setPreview(null)}
@@ -630,6 +666,7 @@ export default function Documents() {
                 </div>
                 <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-3">
                   <User className="w-3 h-3" /> {preview.driverName}
+                  <span className={`badge-sm ml-1 ${ROLE_CONFIG[preview.role].class}`}>{ROLE_CONFIG[preview.role].label}</span>
                 </div>
                 <span className={`badge-sm ${st.class} w-fit mb-3`}>{st.label}</span>
 

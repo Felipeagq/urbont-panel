@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Car, Users, FileText, DollarSign,
   MapPin, TrendingUp, AlertTriangle, MessageSquareWarning,
   Headphones, Star, Settings, Shield, LogOut, Menu, X, ChevronRight, CreditCard,
-  Globe2, Bell
+  Globe2, Bell, ConciergeBell
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import type { AdminRole } from '@/lib/api';
@@ -27,6 +27,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { name: 'overview',    label: 'Resumen',         href: '/',           icon: LayoutDashboard,      roles: ['owner','developer','support','operations','analyst'], group: 'main' },
   { name: 'drivers',     label: 'Conductores',      href: '/drivers',    icon: Car,                  roles: ['owner','support','operations','analyst'],             group: 'main' },
+  { name: 'valets',      label: 'Valets',           href: '/valets',     icon: ConciergeBell,        roles: ['owner','support','operations','analyst'],             group: 'main' },
   { name: 'passengers',  label: 'Pasajeros',        href: '/passengers', icon: Users,                roles: ['owner','support','analyst'],                          group: 'main' },
   { name: 'rides',       label: 'Viajes',           href: '/rides',      icon: MapPin,               roles: ['owner','support','operations','analyst'],             group: 'ops' },
   { name: 'documents',   label: 'Documentos',       href: '/documents',  icon: FileText,             roles: ['owner','operations'],                                 group: 'ops' },

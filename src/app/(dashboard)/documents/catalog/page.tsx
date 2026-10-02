@@ -11,13 +11,20 @@ import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 
 /**
- * Catálogo de documentos del conductor.
+ * Catálogo de documentos, una pestaña por audiencia.
  *
- * Es la lista que la app le muestra al conductor en Documentos: sale de la
- * tabla `document_catalog` del backend, no del código de la app. Desactivar un
- * documento aquí deja de pedírselo a todo el mundo y deja de bloquear el paso a
- * revisión; no borra nada de lo ya subido.
+ * Conductores: la lista que la app le muestra al conductor en Documentos, de la
+ * tabla `document_catalog`. Valets: la que se le pide al registrarse, de
+ * `valet_document_catalog`. Son listas independientes. Desactivar un documento
+ * deja de pedirlo y de bloquear el paso a revisión; no borra nada de lo subido.
  */
+
+type Audiencia = 'driver' | 'valet';
+
+const AUDIENCIAS: Record<Audiencia, { pestana: string; quien: string; categoria: string; ejemplo: [string, string] }> = {
+  driver: { pestana: 'Conductores', quien: 'el conductor', categoria: 'Vehicle Documents', ejemplo: ['tollTag', 'Toll Tag'] },
+  valet:  { pestana: 'Valets',      quien: 'el valet',     categoria: 'Personal Identity', ejemplo: ['venueBadge', 'Venue badge'] },
+};
 
 interface Documento {
   key: string;
@@ -31,7 +38,7 @@ interface Documento {
 
 type Borrador = Pick<Documento, 'key' | 'label' | 'category' | 'hint' | 'expires'>;
 
-const VACIO: Borrador = { key: '', label: '', category: 'Vehicle Documents', hint: '', expires: false };
+const vacio = (a: Audiencia): Borrador => ({ key: '', label: '', category: AUDIENCIAS[a].categoria, hint: '', expires: false });
 
 export default function CatalogoDocumentos() {
   const [docs, setDocs] = useState<Documento[]>([]);
@@ -40,12 +47,13 @@ export default function CatalogoDocumentos() {
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState<string | null>(null);
   const [editando, setEditando] = useState<string | null>(null);
-  const [borrador, setBorrador] = useState<Borrador>(VACIO);
+  const [audiencia, setAudiencia] = useState<Audiencia>('driver');
+  const [borrador, setBorrador] = useState<Borrador>(vacio('driver'));
   const [creando, setCreando] = useState(false);
 
   const loadData = useCallback(() => {
     setLoading(true);
-    adminFetch('/document-catalog')
+    adminFetch(`/document-catalog?audience=${audiencia}`)
       .then(data => {
         setDocs((data.documents ?? []) as Documento[]);
         setCategorias((data.categories ?? []) as string[]);
@@ -53,7 +61,7 @@ export default function CatalogoDocumentos() {
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [audiencia]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -63,7 +71,7 @@ export default function CatalogoDocumentos() {
     const previos = docs;
     setDocs(prev => prev.map(d => (d.key === key ? { ...d, ...cambios } : d)));
     try {
-      await adminFetch(`/document-catalog/${key}`, { method: 'PATCH', body: JSON.stringify(cambios) });
+      await adminFetch(`/document-catalog/${key}?audience=${audiencia}`, { method: 'PATCH', body: JSON.stringify(cambios) });
       toast.success(aviso);
       setEditando(null);
     } catch (err: any) {
@@ -78,10 +86,10 @@ export default function CatalogoDocumentos() {
     if (!borrador.key.trim() || !borrador.label.trim()) return;
     setGuardando('nuevo');
     try {
-      await adminFetch('/document-catalog', { method: 'POST', body: JSON.stringify(borrador) });
+      await adminFetch(`/document-catalog?audience=${audiencia}`, { method: 'POST', body: JSON.stringify(borrador) });
       toast.success('Documento añadido al catálogo');
       setCreando(false);
-      setBorrador(VACIO);
+      setBorrador(vacio(audiencia));
       loadData();
     } catch (err: any) {
       toast.error(err.message || 'No se pudo crear el documento');
@@ -110,7 +118,7 @@ export default function CatalogoDocumentos() {
           </Link>
           <h1 className="page-title" data-testid="page-title">Catálogo de documentos</h1>
           <p className="text-sm text-gray-400 mt-0.5">
-            {activos} de {docs.length} se le piden al conductor
+            {activos} de {docs.length} se le piden a {AUDIENCIAS[audiencia].quien}
           </p>
         </div>
         <div className="flex gap-2">
@@ -127,8 +135,31 @@ export default function CatalogoDocumentos() {
         </div>
       </div>
 
+      {/* Pestañas */}
+      <div className="flex gap-1 border-b border-gray-200">
+        {(Object.keys(AUDIENCIAS) as Audiencia[]).map(a => (
+          <button
+            key={a}
+            onClick={() => {
+              if (a === audiencia) return;
+              setAudiencia(a);
+              setEditando(null);
+              setCreando(false);
+              setBorrador(vacio(a));
+            }}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              audiencia === a ? 'border-(--brand) text-(--brand)' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {AUDIENCIAS[a].pestana}
+          </button>
+        ))}
+      </div>
+
       <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-xs text-blue-800">
-        Esta lista es la que ve el conductor en la app. Al desactivar un documento deja de pedirse y deja de
+        {audiencia === 'driver'
+          ? 'Esta lista es la que ve el conductor en la app.'
+          : 'Esta lista es la que se le pide al valet al registrarse en la app o en la web.'} Al desactivar un documento deja de pedirse y deja de
         impedir el paso a revisión; lo que ya esté subido se conserva y se sigue viendo en Verificación.
       </div>
 
@@ -141,16 +172,16 @@ export default function CatalogoDocumentos() {
               <span>Clave interna (sin espacios)</span>
               <input
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-(--brand)/30"
-                placeholder="tollTag"
+                placeholder={AUDIENCIAS[audiencia].ejemplo[0]}
                 value={borrador.key}
                 onChange={e => setBorrador({ ...borrador, key: e.target.value })}
               />
             </label>
             <label className="text-xs text-gray-500 space-y-1">
-              <span>Nombre que ve el conductor</span>
+              <span>Nombre que ve {AUDIENCIAS[audiencia].quien}</span>
               <input
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--brand)/30"
-                placeholder="Toll Tag"
+                placeholder={AUDIENCIAS[audiencia].ejemplo[1]}
                 value={borrador.label}
                 onChange={e => setBorrador({ ...borrador, label: e.target.value })}
               />
@@ -184,7 +215,7 @@ export default function CatalogoDocumentos() {
                 checked={borrador.expires}
                 onChange={e => setBorrador({ ...borrador, expires: e.target.checked })}
               />
-              Caduca: se le pide la fecha de vencimiento al subirlo
+              Caduca: se pide la fecha de vencimiento al subirlo
             </label>
             <button
               onClick={crear}
@@ -301,7 +332,7 @@ export default function CatalogoDocumentos() {
                           onClick={() => guardar(
                             doc.key,
                             { active: !doc.active },
-                            !doc.active ? `«${doc.label}» ahora se le pide al conductor` : `«${doc.label}» ya no se le pide`,
+                            !doc.active ? `«${doc.label}» ahora se le pide a ${AUDIENCIAS[audiencia].quien}` : `«${doc.label}» ya no se le pide`,
                           )}
                           disabled={guardando === doc.key}
                           role="switch"
