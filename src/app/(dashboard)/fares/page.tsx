@@ -112,6 +112,11 @@ export default function Fares() {
   const [commissionDraft, setCommissionDraft] = useState('');
   const [savingCommission, setSavingCommission] = useState(false);
   const [savingTax, setSavingTax] = useState(false);
+  // La comisión del valet: se suma al huésped y se le paga al valet. Mínimo hasta un
+  // tope de servicio y un porcentaje por encima.
+  const [valetRules, setValetRules] = useState<{ minimumUsd: number; thresholdUsd: number; percent: number } | null>(null);
+  const [valetDraft, setValetDraft] = useState({ minimumUsd: '', thresholdUsd: '', percent: '' });
+  const [savingValet, setSavingValet] = useState(false);
 
   const loadData = useCallback(() => {
     setLoading(true);
@@ -124,6 +129,11 @@ export default function Fares() {
         const tasa = typeof res.taxFallbackRatePercent === 'number' ? res.taxFallbackRatePercent : null;
         setTaxRate(tasa);
         setTaxDraft(tasa != null ? String(tasa) : '');
+        if (res.valetCommission && typeof res.valetCommission.minimumUsd === 'number') {
+          const v = res.valetCommission as { minimumUsd: number; thresholdUsd: number; percent: number };
+          setValetRules({ minimumUsd: v.minimumUsd, thresholdUsd: v.thresholdUsd, percent: v.percent });
+          setValetDraft({ minimumUsd: String(v.minimumUsd), thresholdUsd: String(v.thresholdUsd), percent: String(v.percent) });
+        }
         const comision = typeof res.platformCommissionPercent === 'number' ? res.platformCommissionPercent : null;
         setCommission(comision);
         setCommissionDraft(comision != null ? String(comision) : '');
@@ -516,6 +526,76 @@ export default function Fares() {
           )}
         </div>
       </div>
+
+      {/* Comisión del valet — editable */}
+      {valetRules && (() => {
+        const min = Number(valetDraft.minimumUsd);
+        const tope = Number(valetDraft.thresholdUsd);
+        const pct = Number(valetDraft.percent);
+        const valido = [min, tope, pct].every(n => Number.isFinite(n)) && valetDraft.minimumUsd.trim() !== ''
+          && valetDraft.thresholdUsd.trim() !== '' && valetDraft.percent.trim() !== '';
+        const cambiado = valido && (min !== valetRules.minimumUsd || tope !== valetRules.thresholdUsd || pct !== valetRules.percent);
+        // La misma cuenta que hace el servidor, para que el ejemplo no engañe.
+        const ejemplo = (servicio: number) => (servicio <= tope ? min : Math.round(servicio * pct) / 100);
+        const campo = (clave: 'minimumUsd' | 'thresholdUsd' | 'percent', etiqueta: string, step: string) => (
+          <label className="text-xs text-gray-500 space-y-1">
+            <span>{etiqueta}</span>
+            <input
+              type="number" step={step} min="0"
+              value={valetDraft[clave]}
+              onChange={e => setValetDraft({ ...valetDraft, [clave]: e.target.value })}
+              className="block w-36 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--brand)/30"
+            />
+          </label>
+        );
+        return (
+          <div className="bg-white rounded-xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 space-y-3">
+            <div className="flex items-center gap-2">
+              <DollarSign className="w-4 h-4 text-(--brand)" />
+              <h2 className="text-sm font-bold text-gray-900">Comisión del valet</h2>
+            </div>
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Se suma al total del huésped en cada viaje que despacha un valet y es lo que se le paga al valet. Hasta el tope
+              del servicio rige el mínimo; por encima, el porcentaje. Solo cambia los viajes nuevos: los ya creados conservan su comisión.
+            </p>
+            <div className="flex items-end gap-3 flex-wrap">
+              {campo('minimumUsd', 'Mínimo (USD)', '0.5')}
+              {campo('thresholdUsd', 'Rige hasta un servicio de (USD)', '5')}
+              {campo('percent', 'Por encima, porcentaje (%)', '0.5')}
+              <button
+                onClick={async () => {
+                  setSavingValet(true);
+                  try {
+                    const r = await adminFetch('/fares/valet-commission', {
+                      method: 'PUT',
+                      body: JSON.stringify({ minimumUsd: min, thresholdUsd: tope, percent: pct }),
+                    });
+                    const v = r.valetCommission as { minimumUsd: number; thresholdUsd: number; percent: number };
+                    setValetRules(v);
+                    setValetDraft({ minimumUsd: String(v.minimumUsd), thresholdUsd: String(v.thresholdUsd), percent: String(v.percent) });
+                    toast.success('Comisión del valet guardada');
+                  } catch (err: any) {
+                    toast.error(err.message || 'No se pudo guardar la comisión del valet');
+                  } finally {
+                    setSavingValet(false);
+                  }
+                }}
+                disabled={savingValet || !cambiado}
+                className="btn-primary flex items-center gap-2 text-xs disabled:opacity-50"
+              >
+                {savingValet ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                Guardar comisión del valet
+              </button>
+            </div>
+            {valido && (
+              <p className="text-xs text-gray-400">
+                Ejemplos: servicio de $25 → ${ejemplo(25).toFixed(2)}; de ${tope} → ${ejemplo(tope).toFixed(2)};
+                de ${(tope * 2).toFixed(0)} → ${ejemplo(tope * 2).toFixed(2)}.
+              </p>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Impuesto — tasa de respaldo, editable */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 space-y-3">
