@@ -18,6 +18,8 @@ export interface SurgeState {
   manualReason: string | null;
   manualSetBy: string | null;
   manualSetAt: string | null;
+  /** Se fijó sin avisar: ni aviso en pantalla al pasajero ni push al conductor. */
+  manualSilent: boolean;
   timeSurgeMultiplier: number;
   effectiveMultiplier: number;
   origin: SurgeOrigin;

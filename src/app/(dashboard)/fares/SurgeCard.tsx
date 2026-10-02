@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { adminFetch } from '@/lib/api';
 import { hace } from '@/lib/system-metrics';
 import { origenEtiqueta, describirFranja, type SurgeState } from '@/lib/surge';
-import { Zap, AlertTriangle, Lock, Unlock, RefreshCw } from 'lucide-react';
+import { Zap, AlertTriangle, Lock, Unlock, RefreshCw, BellOff } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 
@@ -23,6 +23,8 @@ export default function SurgeCard() {
   const [valorManual, setValorManual] = useState('');
   const [motivo, setMotivo] = useState('');
   const [confirmando, setConfirmando] = useState(false);
+  // Fijar el recargo sin que al pasajero le salte el aviso ni al conductor el push.
+  const [sinAvisar, setSinAvisar] = useState(false);
 
   const cargar = useCallback(async () => {
     try {
@@ -154,9 +156,15 @@ export default function SurgeCard() {
                 <p className="text-sm text-gray-900">
                   <span className="font-semibold tabular-nums">{estado.manualMultiplier?.toFixed(2)}×</span>
                   {estado.manualReason && <span className="text-gray-600"> · «{estado.manualReason}»</span>}
+                  {estado.manualSilent && (
+                    <span className="ml-2 inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 align-middle text-[11px] text-gray-600">
+                      <BellOff className="h-3 w-3" /> Sin avisar
+                    </span>
+                  )}
                 </p>
                 <p className="mt-0.5 text-xs text-gray-500">
                   El cálculo automático está pausado mientras haya un valor fijado a mano.
+                  {estado.manualSilent && ' Al liberarlo tampoco se avisará.'}
                 </p>
               </div>
             </div>
@@ -206,6 +214,22 @@ export default function SurgeCard() {
               </button>
             </div>
 
+            <label className="flex cursor-pointer items-start gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={sinAvisar}
+                onChange={e => setSinAvisar(e.target.checked)}
+                className="mt-0.5 h-4 w-4 cursor-pointer accent-gray-900"
+              />
+              <span>
+                Fijar sin avisar
+                <span className="block text-xs text-gray-500">
+                  El precio cambia igual, pero al pasajero no le sale el aviso en pantalla
+                  ni al conductor le llega la notificación. Liberarlo después tampoco avisará.
+                </span>
+              </span>
+            </label>
+
             {confirmando && (
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
                 <div className="flex items-start gap-2 text-sm text-amber-800">
@@ -213,6 +237,9 @@ export default function SurgeCard() {
                   <span>
                     Cambia lo que cuesta cada viaje nuevo, y el automático queda pausado
                     hasta que lo liberes.
+                    {sinAvisar
+                      ? ' Nadie recibirá aviso: ni el pasajero en pantalla ni el conductor por notificación.'
+                      : ' Al pasajero le saldrá el aviso en pantalla y al conductor le llegará la notificación.'}
                   </span>
                 </div>
                 <div className="flex gap-2">
@@ -226,9 +253,9 @@ export default function SurgeCard() {
                     onClick={() => void mutar(
                       () => adminFetch('/surge/manual', {
                         method: 'PUT',
-                        body: JSON.stringify({ multiplier: Number(valorManual.replace(',', '.')), reason: motivo.trim() || undefined }),
+                        body: JSON.stringify({ multiplier: Number(valorManual.replace(',', '.')), reason: motivo.trim() || undefined, silent: sinAvisar }),
                       }),
-                      `Recargo fijado en ${Number(valorManual.replace(',', '.')).toFixed(2)}×`,
+                      `Recargo fijado en ${Number(valorManual.replace(',', '.')).toFixed(2)}×${sinAvisar ? ', sin avisar' : ''}`,
                     )}
                     disabled={guardando}
                     className="rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
