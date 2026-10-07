@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { adminFetch } from '@/lib/api';
+import SetPasswordButton from '@/components/SetPasswordButton';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
 import {
   X, Phone, Mail, Star, MapPin, Calendar, UserX, UserCheck, Loader2, ChevronRight,
@@ -611,6 +612,7 @@ export default function ValetDrawer({ valet, onClose, onRefresh }: ValetDrawerPr
                 Reactivar
               </button>
             )}
+            {valet.hasProfile && <SetPasswordButton userId={valet.id} userName={valet.name} />}
           </div>
         </div>
       </div>

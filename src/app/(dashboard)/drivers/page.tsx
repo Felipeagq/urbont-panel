@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { adminFetch } from '@/lib/api';
+import SetPasswordButton from '@/components/SetPasswordButton';
 import { formatDate, actionTookEffect, formatUrbontId, normalizarIdBusqueda } from '@/lib/utils';
 import {
   Search, Car, Star, Shield, CheckCircle2,
@@ -601,6 +602,7 @@ export default function Drivers() {
                           >
                             <ExternalLink className="w-3.5 h-3.5" /> Perfil completo
                           </button>
+                          <SetPasswordButton userId={driver.id} userName={driver.name} />
                           {driver.status !== 'suspended' && suspendTarget !== driver.id && (
                             <button
                               onClick={() => setSuspendTarget(driver.id)}

@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Car, Users, FileText, DollarSign,
   MapPin, TrendingUp, AlertTriangle, MessageSquareWarning,
-  Headphones, Star, Settings, Shield, LogOut, Menu, X, ChevronRight, CreditCard,
+  Headphones, Star, Settings, Shield, FlaskConical, LogOut, Menu, X, ChevronRight, CreditCard,
   Globe2, Bell, ConciergeBell
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -42,6 +42,7 @@ const NAV_ITEMS: NavItem[] = [
   { name: 'financiero',  label: 'Financiero',       href: '/financiero', icon: CreditCard,           roles: ['owner','analyst'],                                    group: 'admin' },
   { name: 'system',      label: 'Sistema',          href: '/system',     icon: Settings,             roles: ['owner','developer'],                                  group: 'admin' },
   { name: 'users',       label: 'Admin Users',      href: '/users',      icon: Shield,               roles: ['owner'],                                              group: 'admin' },
+  { name: 'test-accounts', label: 'Cuentas de prueba', href: '/test-accounts', icon: FlaskConical,     roles: ['owner'],                                              group: 'admin' },
 ];
 
 const ROLE_META: Record<AdminRole, { label: string; color: string }> = {
