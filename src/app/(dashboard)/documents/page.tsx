@@ -23,6 +23,8 @@ interface Document {
   uploadedAt: string;
   /** `YYYY-MM-DD`; null en los documentos que no vencen. */
   expiresAt: string | null;
+  /** Avisos de vencimiento ya enviados al conductor; null si el backend no los manda. */
+  notices: { d30: boolean; d15: boolean; d7: boolean } | null;
   fileUrl: string;
   notes?: string;
   rejectionReason?: string;
@@ -96,6 +98,73 @@ function ExpiryLine({ expiresAt }: { expiresAt: string | null }) {
     <div className={`flex items-center gap-1.5 text-[11px] font-medium mb-3 ${color}`}>
       <AlertTriangle className="w-3 h-3" />
       {texto} · {fecha}
+    </div>
+  );
+}
+
+const ETAPAS_AVISO = [
+  { dias: 30, siguiente: 15, campo: 'd30', label: 'Aviso 30 días' },
+  { dias: 15, siguiente: 7,  campo: 'd15', label: 'Aviso 15 días' },
+  { dias: 7,  siguiente: 0,  campo: 'd7',  label: 'Aviso 7 días' },
+] as const;
+
+/**
+ * Qué avisos de vencimiento le llegaron al conductor. Un aviso no enviado cuya
+ * ventana ya pasó se marca "No enviado": el cron sólo manda el del tramo actual.
+ */
+function ExpiryNotices({ doc, compact = false }: { doc: Document; compact?: boolean }) {
+  if (!doc.expiresAt || !doc.notices) return null;
+  const dias = daysUntil(doc.expiresAt);
+  const vencido = dias <= 0;
+
+  const etapas = ETAPAS_AVISO.map(e => {
+    const enviado = doc.notices![e.campo];
+    const estado = enviado ? 'enviado' : dias > e.siguiente ? 'pendiente' : 'no_enviado';
+    return { ...e, estado };
+  });
+
+  if (compact) {
+    return (
+      <div className="flex flex-wrap items-center gap-1 mb-3">
+        {etapas.map(e => (
+          <span
+            key={e.campo}
+            title={`${e.label}: ${e.estado === 'enviado' ? 'enviado' : e.estado === 'pendiente' ? 'pendiente' : 'no enviado'}`}
+            className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-semibold border ${
+              e.estado === 'enviado' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+              : e.estado === 'no_enviado' ? 'bg-gray-50 text-gray-400 border-gray-200 line-through'
+              : 'bg-white text-gray-400 border-gray-200'}`}
+          >
+            {e.estado === 'enviado' && <CheckCircle2 className="w-2.5 h-2.5" />}{e.dias}d
+          </span>
+        ))}
+        <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-semibold border ${
+          vencido ? 'bg-red-50 text-red-700 border-red-200' : 'bg-white text-gray-400 border-gray-200'}`}>
+          {vencido ? <><XCircle className="w-2.5 h-2.5" /> Suspendido</> : 'Vence'}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-3 rounded-lg border border-gray-100 bg-gray-50/60 p-2.5 space-y-1.5">
+      <p className="text-[11px] font-medium text-gray-500">Avisos al conductor</p>
+      {etapas.map(e => (
+        <div key={e.campo} className="flex items-center gap-2 text-xs">
+          {e.estado === 'enviado'
+            ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            : <Clock className="w-4 h-4 text-gray-300 shrink-0" />}
+          <span className={e.estado === 'enviado' ? 'text-gray-800' : 'text-gray-400'}>
+            {e.label} — {e.estado === 'enviado' ? 'Enviado' : e.estado === 'pendiente' ? 'Pendiente' : 'No enviado'}
+          </span>
+        </div>
+      ))}
+      <div className="flex items-center gap-2 text-xs">
+        <span className={`w-3.5 h-3.5 mx-px rounded-full shrink-0 ${vencido ? 'bg-red-500' : 'bg-gray-200'}`} />
+        <span className={vencido ? 'text-red-700 font-medium' : 'text-gray-400'}>
+          {vencido ? 'Vencido — cuenta suspendida' : 'Vencimiento — cuenta activa'}
+        </span>
+      </div>
     </div>
   );
 }
@@ -231,8 +300,9 @@ export default function Documents() {
   }, []);
 
   const guardarVencimiento = (id: string, expiresAt: string | null) => {
-    setDocuments(prev => prev.map(d => d.id === id ? { ...d, expiresAt } : d));
-    setPreview(p => p && p.id === id ? { ...p, expiresAt } : p);
+    const reinicio = { d30: false, d15: false, d7: false };
+    setDocuments(prev => prev.map(d => d.id === id ? { ...d, expiresAt, notices: d.notices && reinicio } : d));
+    setPreview(p => p && p.id === id ? { ...p, expiresAt, notices: p.notices && reinicio } : p);
   };
 
   const toggleGroup = (key: string) => {
@@ -255,6 +325,7 @@ export default function Documents() {
         status: d.status === 'valid' ? 'approved' : d.status,
         uploadedAt: d.uploadDate,
         expiresAt: d.expiryDate ? String(d.expiryDate).slice(0, 10) : null,
+        notices: d.notices ?? null,
         fileUrl: d.imageUrl,
         notes: d.notes,
         rejectionReason: d.rejectionReason,
@@ -500,6 +571,7 @@ export default function Documents() {
             Subido {formatRelativeTime(doc.uploadedAt)}
           </div>
           <ExpiryLine expiresAt={doc.expiresAt} />
+          <ExpiryNotices doc={doc} compact />
 
           {doc.rejectionReason && (
             <div className="mb-3 p-2.5 bg-red-50 border border-red-100 rounded-lg text-xs text-red-700">
@@ -768,6 +840,7 @@ export default function Documents() {
                   Subido {formatRelativeTime(preview.uploadedAt)}
                 </div>
                 <ExpiryLine expiresAt={preview.expiresAt} />
+                <ExpiryNotices doc={preview} />
                 {(expiringKeys.has(`${preview.role}:${preview.docType}`) || preview.expiresAt) && (
                   <ExpiryEditor
                     key={preview.id}
