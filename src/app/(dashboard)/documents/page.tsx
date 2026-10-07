@@ -21,6 +21,8 @@ interface Document {
   docType: string;
   status: 'pending' | 'approved' | 'rejected';
   uploadedAt: string;
+  /** `YYYY-MM-DD`; null en los documentos que no vencen. */
+  expiresAt: string | null;
   fileUrl: string;
   notes?: string;
   rejectionReason?: string;
@@ -70,6 +72,79 @@ const DOC_TYPES: Record<string, string> = {
 const DOC_TYPES_VALET: Record<string, string> = { license: 'Documento de identidad' };
 function docTypeLabel(t: string, role?: 'driver' | 'valet') {
   return (role === 'valet' ? DOC_TYPES_VALET[t] : undefined) ?? DOC_TYPES[t] ?? t;
+}
+
+/** Días hasta el vencimiento, por fecha de calendario local (no por horas). */
+function daysUntil(ymd: string): number {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const hoy = new Date();
+  const inicioHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+  return Math.round((new Date(y, m - 1, d).getTime() - inicioHoy.getTime()) / 86_400_000);
+}
+
+function ExpiryLine({ expiresAt }: { expiresAt: string | null }) {
+  if (!expiresAt) return null;
+  const dias = daysUntil(expiresAt);
+  const [y, m, d] = expiresAt.split('-').map(Number);
+  const fecha = new Date(y, m - 1, d).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' });
+  const texto =
+    dias < 0   ? `Expiró hace ${-dias} ${dias === -1 ? 'día' : 'días'}` :
+    dias === 0 ? 'Expira hoy' :
+                 `Faltan ${dias} ${dias === 1 ? 'día' : 'días'} para que expire`;
+  const color = dias <= 7 ? 'text-red-600' : dias <= 30 ? 'text-amber-600' : 'text-gray-500';
+  return (
+    <div className={`flex items-center gap-1.5 text-[11px] font-medium mb-3 ${color}`}>
+      <AlertTriangle className="w-3 h-3" />
+      {texto} · {fecha}
+    </div>
+  );
+}
+
+/** Carga o corrige la fecha de vencimiento; los documentos del alta web llegan sin ella. */
+function ExpiryEditor({ doc, onSaved }: { doc: Document; onSaved: (expiresAt: string | null) => void }) {
+  const [value, setValue] = useState(doc.expiresAt ?? '');
+  const [saving, setSaving] = useState(false);
+  const cambio = value !== (doc.expiresAt ?? '');
+
+  const guardar = async () => {
+    setSaving(true);
+    try {
+      const r = await adminFetch(`/documents/${doc.id}/expiry`, {
+        method: 'POST',
+        body: JSON.stringify({ expiryDate: value || null }),
+      });
+      onSaved(r.expiryDate ? String(r.expiryDate).slice(0, 10) : null);
+      toast.success(value ? 'Fecha de vencimiento guardada' : 'Fecha de vencimiento eliminada');
+    } catch (e) {
+      toast.error((e as Error).message || 'No se pudo guardar la fecha');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="mb-3">
+      <label className="block text-[11px] font-medium text-gray-500 mb-1">Fecha de vencimiento</label>
+      <div className="flex items-center gap-2">
+        <input
+          type="date"
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          className="input-base text-sm py-1.5 flex-1"
+        />
+        <button
+          onClick={guardar}
+          disabled={!cambio || saving}
+          className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50"
+        >
+          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Guardar'}
+        </button>
+      </div>
+      {!doc.expiresAt && (
+        <p className="text-[11px] text-amber-600 mt-1">Sin fecha: este documento no recibe avisos de vencimiento.</p>
+      )}
+    </div>
+  );
 }
 
 const AVATAR_PALETTE = [
@@ -143,6 +218,22 @@ export default function Documents() {
   const [grouped, setGrouped] = useState(true);
   // Por defecto todos los grupos van cerrados; sólo se abre lo que el usuario toca.
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  /** `rol:clave` de los documentos que vencen, según el catálogo de cada audiencia. */
+  const [expiringKeys, setExpiringKeys] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    Promise.all((['driver', 'valet'] as const).map(a =>
+      adminFetch(`/document-catalog?audience=${a}`)
+        .then(data => ((data.documents ?? []) as { key: string; expires: boolean }[])
+          .filter(d => d.expires).map(d => `${a}:${d.key}`))
+        .catch(() => [] as string[]),
+    )).then(listas => setExpiringKeys(new Set(listas.flat())));
+  }, []);
+
+  const guardarVencimiento = (id: string, expiresAt: string | null) => {
+    setDocuments(prev => prev.map(d => d.id === id ? { ...d, expiresAt } : d));
+    setPreview(p => p && p.id === id ? { ...p, expiresAt } : p);
+  };
 
   const toggleGroup = (key: string) => {
     setExpanded(prev => {
@@ -163,6 +254,7 @@ export default function Documents() {
         docType: d.type,
         status: d.status === 'valid' ? 'approved' : d.status,
         uploadedAt: d.uploadDate,
+        expiresAt: d.expiryDate ? String(d.expiryDate).slice(0, 10) : null,
         fileUrl: d.imageUrl,
         notes: d.notes,
         rejectionReason: d.rejectionReason,
@@ -407,6 +499,7 @@ export default function Documents() {
             <Clock className="w-3 h-3" />
             Subido {formatRelativeTime(doc.uploadedAt)}
           </div>
+          <ExpiryLine expiresAt={doc.expiresAt} />
 
           {doc.rejectionReason && (
             <div className="mb-3 p-2.5 bg-red-50 border border-red-100 rounded-lg text-xs text-red-700">
@@ -674,6 +767,14 @@ export default function Documents() {
                   <Clock className="w-3 h-3" />
                   Subido {formatRelativeTime(preview.uploadedAt)}
                 </div>
+                <ExpiryLine expiresAt={preview.expiresAt} />
+                {(expiringKeys.has(`${preview.role}:${preview.docType}`) || preview.expiresAt) && (
+                  <ExpiryEditor
+                    key={preview.id}
+                    doc={preview}
+                    onSaved={expiresAt => guardarVencimiento(preview.id, expiresAt)}
+                  />
+                )}
 
                 {preview.rejectionReason && (
                   <div className="mb-3 p-2.5 bg-red-50 border border-red-100 rounded-lg text-xs text-red-700">
