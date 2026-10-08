@@ -5,7 +5,7 @@ import { adminFetch } from '@/lib/api';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
 import {
   Headphones, RefreshCw, Search, ChevronDown, ChevronUp,
-  Send, X, AlertTriangle, Loader2, User, Clock, ArrowUp, Siren, Phone, Car,
+  Send, X, AlertTriangle, Loader2, User, Clock, ArrowUp, Siren, Phone, Car, Mail,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -35,6 +35,7 @@ interface Ticket {
   userName: string;
   userType: string;
   userPhone: string | null;
+  userEmail: string | null;
   rideId: string | null;
   category: string;
   subject: string;
@@ -69,13 +70,22 @@ const CATEGORY_LABELS: Record<string, string> = {
   roadside_assistance: 'Asistencia en carretera',
   support_chat:        'Chat de soporte',
   other:               'Otro',
+  pqrs_peticion:       'PQRS · Petición',
+  pqrs_queja:          'PQRS · Queja',
+  pqrs_reclamo:        'PQRS · Reclamo',
+  pqrs_sugerencia:     'PQRS · Sugerencia',
 };
 
 const USER_TYPE_LABELS: Record<string, string> = {
   passenger: 'pasajero',
   driver: 'conductor',
+  web: 'web',
   other: 'otro',
 };
+
+/** Mismo número que recibe el remitente por correo (ver radicado() en el backend). */
+const radicadoPqrs = (t: { id: string; category: string }) =>
+  t.category.startsWith('pqrs_') ? `PQRS-${t.id.replace(/-/g, '').slice(0, 8).toUpperCase()}` : null;
 
 const categoryLabel = (c: string) => CATEGORY_LABELS[c] ?? c.replace(/_/g, ' ');
 
@@ -101,6 +111,7 @@ export default function Support() {
           userName: t.userName ?? 'Usuario',
           userType: t.userType ?? 'passenger',
           userPhone: t.userPhone && t.userPhone !== 'N/A' ? t.userPhone : null,
+          userEmail: t.userEmail ?? null,
           rideId: t.rideId ?? null,
           category: t.category ?? 'other',
           subject: t.subject || '(sin asunto)',
@@ -313,6 +324,9 @@ export default function Support() {
                       <span className={`badge-sm ${pr.class}`}>{pr.label}</span>
                       <span className={`badge-sm ${st.class}`}>{st.label}</span>
                       <span className="badge-sm bg-gray-50 text-gray-500 border border-gray-200">{categoryLabel(ticket.category)}</span>
+                      {radicadoPqrs(ticket) && (
+                        <span className="badge-sm bg-violet-50 text-violet-700 border border-violet-200 font-mono">{radicadoPqrs(ticket)}</span>
+                      )}
                     </div>
                     <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
                       <span className="flex items-center gap-1">
@@ -342,11 +356,19 @@ export default function Support() {
                 {/* Expanded conversation */}
                 {isExpanded && (
                   <div className="border-t border-gray-100">
-                    {(ticket.userPhone || ticket.rideId) && (
+                    {(ticket.userPhone || ticket.userEmail || ticket.rideId) && (
                       <div className="px-4 pt-3 flex items-center gap-4 flex-wrap text-xs">
                         {ticket.userPhone && (
                           <a href={`tel:${ticket.userPhone}`} className="flex items-center gap-1.5 text-(--brand) font-medium hover:underline">
                             <Phone className="w-3.5 h-3.5" /> Llamar a {ticket.userPhone}
+                          </a>
+                        )}
+                        {ticket.userEmail && (
+                          <a
+                            href={`mailto:${ticket.userEmail}?subject=${encodeURIComponent(`Re: ${radicadoPqrs(ticket) ?? ticket.subject}`)}`}
+                            className="flex items-center gap-1.5 text-(--brand) font-medium hover:underline"
+                          >
+                            <Mail className="w-3.5 h-3.5" /> Responder a {ticket.userEmail}
                           </a>
                         )}
                         {ticket.rideId && (
