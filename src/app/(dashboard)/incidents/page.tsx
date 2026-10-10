@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
+import CleaningChargesTab, { contarLimpiezasPendientes } from '@/components/CleaningChargesTab';
 
 /**
  * Incidentes: los reporta el conductor desde la pantalla Help de la app
@@ -186,6 +187,9 @@ export default function Incidents() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [resolutionTarget, setResolutionTarget] = useState<string | null>(null);
   const [resolutionText, setResolutionText] = useState('');
+  const [tab, setTab] = useState<'incidents' | 'cleaning'>('incidents');
+  const [limpiezasPendientes, setLimpiezasPendientes] = useState(0);
+  useEffect(() => { void contarLimpiezasPendientes().then(setLimpiezasPendientes); }, []);
 
   const loadData = useCallback(() => {
     setLoading(true);
@@ -258,11 +262,29 @@ export default function Incidents() {
             {counts.open} abiertos · {counts.investigating} en investigación · {counts.resolved} resueltos
           </p>
         </div>
-        <button onClick={loadData} className="btn-outline flex items-center gap-2 text-xs">
-          <RefreshCw className="w-3.5 h-3.5" /> Actualizar
-        </button>
+        {tab === 'incidents' && (
+          <button onClick={loadData} className="btn-outline flex items-center gap-2 text-xs">
+            <RefreshCw className="w-3.5 h-3.5" /> Actualizar
+          </button>
+        )}
       </div>
 
+      <div className="flex gap-2 border-b border-gray-100">
+        {([['incidents', 'Incidentes', 0], ['cleaning', 'Limpieza', limpiezasPendientes]] as const).map(([id, label, n]) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-1.5 ${
+              tab === id ? 'border-(--brand) text-(--brand)' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {label}
+            {n > 0 && <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center">{n}</span>}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'cleaning' ? <CleaningChargesTab onCount={setLimpiezasPendientes} /> : (<>
       {/* SOS sin resolver: lo primero que debe ver operaciones */}
       {sosAbiertos > 0 && (
         <button
@@ -586,6 +608,7 @@ export default function Incidents() {
           </div>
         </div>
       )}
+      </>)}
     </div>
   );
 }
