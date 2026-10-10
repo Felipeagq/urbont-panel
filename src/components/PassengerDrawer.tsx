@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { adminFetch } from '@/lib/api';
+import DeleteAccountButton from '@/components/DeleteAccountButton';
 import { formatDate, formatRelativeTime, actionTookEffect } from '@/lib/utils';
 import {
   X, Phone, Mail, Star, MapPin, Calendar, AlertTriangle,
@@ -350,6 +351,11 @@ export default function PassengerDrawer({ passenger, onClose, onRefresh }: Passe
             </div>
           ) : (
             <div className="flex gap-2 flex-wrap">
+              <DeleteAccountButton
+                endpoint={`/passengers/${passenger.id}`}
+                name={passenger.name}
+                onDeleted={() => { onClose(); void onRefresh(); }}
+              />
               {passenger.status === 'active' && (
                 <button
                   onClick={() => setShowSuspendForm(true)}
