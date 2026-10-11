@@ -5,6 +5,9 @@ import { adminFetch } from '@/lib/api';
 import { Search, ConciergeBell, RefreshCw, AlertTriangle, ChevronRight, Star } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import ValetDrawer, { VALET_STATUS, type Valet, type ValetStatus } from '@/components/ValetDrawer';
+import { useAuth } from '@/contexts/AuthContext';
+import { useBulkSelection, SelectCheckbox, BulkDeleteBar } from '@/components/BulkSelection';
+import DeleteAccountsDialog from '@/components/DeleteAccountsDialog';
 
 const FILTERS = ['all', 'pending', 'active', 'suspended', 'rejected'] as const;
 
@@ -37,6 +40,9 @@ export default function Valets() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('all');
   const [selected, setSelected] = useState<Valet | null>(null);
+  const [borrandoLote, setBorrandoLote] = useState(false);
+  // Borrar es sólo del owner, así que la selección también.
+  const puedeBorrar = useAuth().user?.role === 'owner';
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -64,6 +70,8 @@ export default function Valets() {
       || v.phone.includes(q) || v.property.toLowerCase().includes(q) || v.city.toLowerCase().includes(q);
     return matchSearch && (filter === 'all' || v.status === filter);
   });
+
+  const seleccion = useBulkSelection(filtered.map(v => v.id), `${filter}|${search}`);
 
   const counts = Object.fromEntries(
     FILTERS.map(f => [f, f === 'all' ? valets.length : valets.filter(v => v.status === f).length]),
@@ -113,6 +121,10 @@ export default function Valets() {
           />
         </div>
 
+        {puedeBorrar && (
+          <BulkDeleteBar count={seleccion.selected.length} onDelete={() => setBorrandoLote(true)} onClear={seleccion.clear} />
+        )}
+
         {loading && valets.length === 0 ? (
           <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
             {Array.from({ length: 5 }).map((_, i) => (
@@ -131,7 +143,12 @@ export default function Valets() {
         ) : (
           <div className="bg-white rounded-xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden">
             <div className="grid grid-cols-[2fr_1.5fr_1.2fr_1fr_30px] gap-4 px-5 py-3 bg-gray-50 border-b border-gray-100 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-              <span>Valet</span><span>Propiedad</span><span>Actividad</span><span>Estado</span><span />
+              <span className="flex items-center gap-3">
+                {puedeBorrar && (
+                  <SelectCheckbox checked={seleccion.all} indeterminate={seleccion.some} onChange={seleccion.toggleAll} label="Seleccionar todos" />
+                )}
+                Valet
+              </span><span>Propiedad</span><span>Actividad</span><span>Estado</span><span />
             </div>
 
             {filtered.length === 0 ? (
@@ -149,6 +166,9 @@ export default function Valets() {
                     data-testid={`row-valet-${v.id}`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
+                      {puedeBorrar && (
+                        <SelectCheckbox checked={seleccion.isSelected(v.id)} onChange={() => seleccion.toggle(v.id)} label={`Seleccionar a ${v.name}`} />
+                      )}
                       <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${avatarColor(v.name)}`}>
                         {getInitials(v.name)}
                       </div>
@@ -183,6 +203,16 @@ export default function Valets() {
       </div>
 
       <ValetDrawer valet={selected} onClose={() => setSelected(null)} onRefresh={loadData} />
+
+      {borrandoLote && (
+        <DeleteAccountsDialog
+          targets={valets.filter(v => seleccion.isSelected(v.id)).map(v => ({
+            id: v.id, endpoint: `/valets/${encodeURIComponent(v.id)}`, name: v.name, softOnly: !v.hasProfile,
+          }))}
+          onClose={() => setBorrandoLote(false)}
+          onDeleted={ids => { seleccion.remove(ids); void loadData(); }}
+        />
+      )}
     </>
   );
 }

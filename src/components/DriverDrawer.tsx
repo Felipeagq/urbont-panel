@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { adminFetch } from '@/lib/api';
+import DeleteAccountButton from '@/components/DeleteAccountButton';
 import { formatDate, formatRelativeTime, actionTookEffect, formatUrbontId } from '@/lib/utils';
 import {
   X, Phone, Mail, Star, MapPin, Calendar, Car, Shield, ShieldCheck,
@@ -609,6 +610,11 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
             >
               <MessageSquare className="w-3.5 h-3.5" /> Nota
             </button>
+            <DeleteAccountButton
+              endpoint={`/drivers/${encodeURIComponent(driver.id)}`}
+              name={driver.name}
+              onDeleted={() => { onClose(); void onRefresh(); }}
+            />
           </div>
         </div>
       </div>

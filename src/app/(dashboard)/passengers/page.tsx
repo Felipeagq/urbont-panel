@@ -10,6 +10,9 @@ import {
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import PassengerDrawer from '@/components/PassengerDrawer';
+import { useAuth } from '@/contexts/AuthContext';
+import { useBulkSelection, SelectCheckbox, BulkDeleteBar } from '@/components/BulkSelection';
+import DeleteAccountsDialog from '@/components/DeleteAccountsDialog';
 
 interface Passenger {
   id: string;
@@ -56,6 +59,9 @@ export default function Passengers() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | Passenger['status']>('all');
   const [selected, setSelected] = useState<Passenger | null>(null);
+  const [borrandoLote, setBorrandoLote] = useState(false);
+  // Borrar es sólo del owner, así que la selección también.
+  const puedeBorrar = useAuth().user?.role === 'owner';
 
   // Devuelve la lista recién cargada para que PassengerDrawer pueda
   // comprobar si suspender/reactivar realmente tuvo efecto, en lugar de
@@ -92,6 +98,8 @@ export default function Passengers() {
     const matchStatus = statusFilter === 'all' || p.status === statusFilter;
     return matchSearch && matchStatus;
   });
+
+  const seleccion = useBulkSelection(filtered.map(p => p.id), `${statusFilter}|${search}`);
 
   const counts = {
     all: passengers.length,
@@ -147,6 +155,10 @@ export default function Passengers() {
         </div>
 
         {/* Table */}
+        {puedeBorrar && (
+          <BulkDeleteBar count={seleccion.selected.length} onDelete={() => setBorrandoLote(true)} onClear={seleccion.clear} />
+        )}
+
         {loading ? (
           <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -169,7 +181,12 @@ export default function Passengers() {
           <div className="bg-white rounded-xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden">
             {/* Table head */}
             <div className="grid grid-cols-[2fr_1.5fr_1fr_1fr_100px] gap-4 px-5 py-3 bg-gray-50 border-b border-gray-100 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-              <span>Pasajero</span>
+              <span className="flex items-center gap-3">
+                {puedeBorrar && (
+                  <SelectCheckbox checked={seleccion.all} indeterminate={seleccion.some} onChange={seleccion.toggleAll} label="Seleccionar todos" />
+                )}
+                Pasajero
+              </span>
               <span>Contacto</span>
               <span>Estadísticas</span>
               <span>Estado</span>
@@ -194,6 +211,9 @@ export default function Passengers() {
                     >
                       {/* Passenger info */}
                       <div className="flex items-center gap-3 min-w-0">
+                        {puedeBorrar && (
+                          <SelectCheckbox checked={seleccion.isSelected(p.id)} onChange={() => seleccion.toggle(p.id)} label={`Seleccionar a ${p.name}`} />
+                        )}
                         <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${av}`}>
                           {getInitials(p.name)}
                         </div>
@@ -259,6 +279,16 @@ export default function Passengers() {
         onClose={() => setSelected(null)}
         onRefresh={loadData}
       />
+
+      {borrandoLote && (
+        <DeleteAccountsDialog
+          targets={passengers.filter(p => seleccion.isSelected(p.id)).map(p => ({
+            id: p.id, endpoint: `/passengers/${encodeURIComponent(p.id)}`, name: p.name,
+          }))}
+          onClose={() => setBorrandoLote(false)}
+          onDeleted={ids => { seleccion.remove(ids); void loadData(); }}
+        />
+      )}
     </>
   );
 }

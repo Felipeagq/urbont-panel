@@ -11,6 +11,9 @@ import {
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import DriverDrawer from '@/components/DriverDrawer';
+import { useAuth } from '@/contexts/AuthContext';
+import { useBulkSelection, SelectCheckbox, BulkDeleteBar } from '@/components/BulkSelection';
+import DeleteAccountsDialog from '@/components/DeleteAccountsDialog';
 
 interface DriverDocument {
   id: string;
@@ -143,6 +146,9 @@ export default function Drivers() {
   const [suspendReason, setSuspendReason] = useState('');
   const [suspendTarget, setSuspendTarget] = useState<string | null>(null);
   const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
+  const [borrandoLote, setBorrandoLote] = useState(false);
+  // Borrar es sólo del owner, así que la selección también.
+  const puedeBorrar = useAuth().user?.role === 'owner';
 
   // Devuelve la lista recién cargada para que quien la llame (p. ej. doAction)
   // pueda comprobar si una acción realmente tuvo efecto, sin depender del
@@ -267,6 +273,8 @@ export default function Drivers() {
     return matchSearch && matchStatus;
   });
 
+  const seleccion = useBulkSelection(filtered.map(d => d.id), `${statusFilter}|${search}`);
+
   const counts = {
     all: drivers.length,
     active: drivers.filter(d => d.status === 'active').length,
@@ -323,6 +331,10 @@ export default function Drivers() {
       </div>
 
       {/* Table */}
+      {puedeBorrar && (
+        <BulkDeleteBar count={seleccion.selected.length} onDelete={() => setBorrandoLote(true)} onClear={seleccion.clear} />
+      )}
+
       {loading ? (
         <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -346,7 +358,12 @@ export default function Drivers() {
         <div className="bg-white rounded-xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden">
           {/* Table head */}
           <div className="grid grid-cols-[2fr_1.5fr_1fr_1fr_80px] gap-4 px-5 py-3 bg-gray-50 border-b border-gray-100 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-            <span>Conductor</span>
+            <span className="flex items-center gap-3">
+              {puedeBorrar && (
+                <SelectCheckbox checked={seleccion.all} indeterminate={seleccion.some} onChange={seleccion.toggleAll} label="Seleccionar todos" />
+              )}
+              Conductor
+            </span>
             <span>Vehículo</span>
             <span>Estadísticas</span>
             <span>Estado</span>
@@ -374,6 +391,9 @@ export default function Drivers() {
                     >
                       {/* Driver info */}
                       <div className="flex items-center gap-3 min-w-0">
+                        {puedeBorrar && (
+                          <SelectCheckbox checked={seleccion.isSelected(driver.id)} onChange={() => seleccion.toggle(driver.id)} label={`Seleccionar a ${driver.name}`} />
+                        )}
                         <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${av}`}>
                           {getInitials(driver.name)}
                         </div>
@@ -650,6 +670,16 @@ export default function Drivers() {
       onClose={() => setSelectedDriver(null)}
       onRefresh={loadData}
     />
+
+    {borrandoLote && (
+      <DeleteAccountsDialog
+        targets={drivers.filter(d => seleccion.isSelected(d.id)).map(d => ({
+          id: d.id, endpoint: `/drivers/${encodeURIComponent(d.id)}`, name: d.name,
+        }))}
+        onClose={() => setBorrandoLote(false)}
+        onDeleted={ids => { seleccion.remove(ids); void loadData(); }}
+      />
+    )}
     </>
   );
 }
