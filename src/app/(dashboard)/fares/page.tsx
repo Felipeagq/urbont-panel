@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { adminFetch } from '@/lib/api';
 import {
   DollarSign, RefreshCw, Save, AlertTriangle, Loader2, Info, TrendingUp,
-  Car, CarFront, Truck, ShieldCheck, Percent, type LucideIcon,
+  Car, CarFront, Truck, ShieldCheck, Percent, Banknote, type LucideIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import SurgeCard from './SurgeCard';
@@ -111,6 +111,9 @@ export default function Fares() {
   const [commission, setCommission] = useState<number | null>(null);
   const [commissionDraft, setCommissionDraft] = useState('');
   const [savingCommission, setSavingCommission] = useState(false);
+  /** null mientras carga o si el backend todavía no expone el ajuste. */
+  const [cashEnabled, setCashEnabled] = useState<boolean | null>(null);
+  const [savingCash, setSavingCash] = useState(false);
   const [savingTax, setSavingTax] = useState(false);
   // La comisión del valet: se suma al huésped y se le paga al valet. Mínimo hasta un
   // tope de servicio y un porcentaje por encima.
@@ -120,6 +123,9 @@ export default function Fares() {
 
   const loadData = useCallback(() => {
     setLoading(true);
+    adminFetch('/settings/cash-payments')
+      .then(r => setCashEnabled(r.enabled === true))
+      .catch(() => setCashEnabled(null));
     adminFetch('/fares')
       .then(res => {
         const data = res.fares ?? {};
@@ -471,6 +477,54 @@ export default function Fares() {
           </div>
         </div>
       )}
+
+      {/* Pagos en efectivo — interruptor */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 space-y-3">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <Banknote className="w-4 h-4 text-(--brand)" />
+              <h2 className="text-sm font-bold text-gray-900">Pagos en efectivo</h2>
+            </div>
+            <p className="text-xs text-gray-500 leading-relaxed mt-1 max-w-2xl">
+              Al apagarlo, el valet y el conductor ya no pueden despachar viajes en efectivo: la app esconde la
+              opción y todo va con tarjeta. Los viajes que ya existen en efectivo no se tocan: se completan y se
+              liquidan igual.
+            </p>
+          </div>
+          <button
+            onClick={async () => {
+              setSavingCash(true);
+              try {
+                const r = await adminFetch('/settings/cash-payments', {
+                  method: 'PUT',
+                  body: JSON.stringify({ enabled: !cashEnabled }),
+                });
+                setCashEnabled(r.enabled);
+                toast.success(r.enabled ? 'Pagos en efectivo activados' : 'Pagos en efectivo desactivados');
+              } catch (err: any) {
+                toast.error(err.message || 'No se pudo guardar el ajuste');
+              } finally {
+                setSavingCash(false);
+              }
+            }}
+            disabled={savingCash || cashEnabled === null}
+            role="switch"
+            aria-checked={cashEnabled === true}
+            aria-label="Pagos en efectivo"
+            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
+              cashEnabled ? 'bg-(--brand)' : 'bg-gray-200'
+            }`}
+          >
+            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${
+              cashEnabled ? 'left-[22px]' : 'left-0.5'
+            }`} />
+          </button>
+        </div>
+        {cashEnabled === false && (
+          <p className="text-xs text-amber-700">Los despachos nuevos solo aceptan tarjeta.</p>
+        )}
+      </div>
 
       {/* Comisión de Urbont — editable */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 space-y-3">
