@@ -25,6 +25,36 @@ export interface ValetDoc {
   rejectionReason: string | null;
 }
 
+/** Compañía, acuerdo y W-9: sin los tres la cuenta no se puede activar. */
+export interface ValetDocumentation {
+  companyComplete: boolean;
+  company: {
+    legalName?: string | null;
+    tradeName?: string | null;
+    entityType?: string | null;
+    address?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    authorizedRep?: string | null;
+  } | null;
+  agreement: 'accepted' | 'pending';
+  agreementVersion: string | null;
+  agreementAcceptedAt: string | null;
+  w9: 'missing' | 'received' | 'pending_review' | 'approved';
+  w9Url: string | null;
+  accountDocumentation: 'pending_documentation' | 'ready';
+}
+
+/** Lo mismo que el servidor exige para aprobar (ver valetPacket.ts). */
+export function faltantesDocumentacion(d?: ValetDocumentation | null): string[] {
+  if (!d) return [];
+  const falta: string[] = [];
+  if (!d.companyComplete) falta.push('datos de la compañía');
+  if (d.agreement !== 'accepted') falta.push('acuerdo de participación firmado');
+  if (d.w9 === 'missing') falta.push('formulario W-9');
+  return falta;
+}
+
 export interface Valet {
   id: string;
   name: string;
@@ -60,6 +90,8 @@ export interface Valet {
   /** Estado de su cuenta de Stripe: sin ella la comisión no se le transfiere. */
   stripeStatus: string;
   canReceivePayouts: boolean;
+  /** Ausente en un backend anterior a la documentación requerida. */
+  documentation?: ValetDocumentation;
 }
 
 interface ValetRide {
@@ -117,6 +149,17 @@ const DOC_STATE = {
 };
 const DOC_STATE_LABEL = { aprobado: '✓ Aprobado', pendiente: '⧗ Por revisar', rechazado: '✗ Rechazado' };
 
+const W9_LABEL: Record<ValetDocumentation['w9'], { label: string; class: string }> = {
+  missing:        { label: 'Sin subir',   class: 'bg-red-50 text-red-700 border-red-200' },
+  received:       { label: 'Recibido',    class: 'bg-blue-50 text-blue-700 border-blue-200' },
+  pending_review: { label: 'En revisión', class: 'bg-amber-50 text-amber-700 border-amber-200' },
+  approved:       { label: 'Aprobado',    class: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+};
+
+const TIPO_EMPRESA: Record<string, string> = {
+  llc: 'LLC', corporation: 'Corporación', sole_proprietorship: 'Empresa unipersonal', partnership: 'Sociedad', other: 'Otro',
+};
+
 const ROLE_LABEL: Record<string, string> = { valet: 'Valet', frontdesk: 'Front desk', concierge: 'Concierge' };
 
 export default function ValetDrawer({ valet, onClose, onRefresh }: ValetDrawerProps) {
@@ -132,6 +175,7 @@ export default function ValetDrawer({ valet, onClose, onRefresh }: ValetDrawerPr
 
   const [rides, setRides] = useState<ValetRide[] | 'loading' | 'error'>('loading');
   const [stripeLoading, setStripeLoading] = useState(false);
+  const [w9Loading, setW9Loading] = useState<string | null>(null);
   const [payLoading, setPayLoading] = useState(false);
 
   const cargarViajes = useCallback((id: string) => {
@@ -185,6 +229,16 @@ export default function ValetDrawer({ valet, onClose, onRefresh }: ValetDrawerPr
 
   /** Aprobar con documentos sin aprobar pide confirmación; el servidor lo exige con `force`. */
   const aprobar = () => {
+    // El servidor rechaza la activación sin compañía, acuerdo y W-9, aunque se fuerce.
+    const sinDocumentacion = faltantesDocumentacion(valet.documentation);
+    if (!valet.hasProfile && valet.documentation) {
+      toast.error('El valet tiene que terminar la documentación requerida en la app antes de activarlo.');
+      return;
+    }
+    if (sinDocumentacion.length > 0) {
+      toast.error(`No se puede aprobar todavía. Falta: ${sinDocumentacion.join(', ')}.`);
+      return;
+    }
     const faltan = valet.documentsSummary.required - valet.documentsSummary.approved;
     if (valet.hasProfile && faltan > 0) {
       const ok = window.confirm(
@@ -196,6 +250,19 @@ export default function ValetDrawer({ valet, onClose, onRefresh }: ValetDrawerPr
       return doAction('approve', { force: true });
     }
     return doAction('approve');
+  };
+
+  const marcarW9 = async (status: 'pending_review' | 'approved') => {
+    setW9Loading(status);
+    try {
+      await adminFetch(`/valets/${encodeURIComponent(valet.id)}/w9`, { method: 'POST', body: JSON.stringify({ status }) });
+      await onRefresh();
+      toast.success(status === 'approved' ? 'W-9 aprobado' : 'W-9 marcado en revisión');
+    } catch (err: any) {
+      toast.error(err.message || 'No se pudo actualizar el W-9');
+    } finally {
+      setW9Loading(null);
+    }
   };
 
   // `stripe_connect_status` se queda en 'pending' aunque termine el alta, así que el panel pregunta a Stripe.
@@ -411,6 +478,112 @@ export default function ValetDrawer({ valet, onClose, onRefresh }: ValetDrawerPr
                     <p className="text-[11px] text-gray-400">
                       Efectivo: el conductor cobró en mano; la plataforma adelanta esta comisión y la recupera de lo que él le debe.
                     </p>
+                  )}
+                </div>
+              )}
+
+              {/* Documentación requerida: compañía, acuerdo y W-9 */}
+              {valet.documentation && (
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
+                      <Briefcase className="w-3.5 h-3.5" /> Documentación requerida
+                    </p>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-medium border ${
+                      valet.documentation.accountDocumentation === 'ready'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                      {valet.documentation.accountDocumentation === 'ready' ? 'Completa' : 'Pendiente'}
+                    </span>
+                  </div>
+                  {!valet.hasProfile ? (
+                    <p className="text-xs text-gray-500">Solicitud sin cuenta: el valet debe completar la documentación desde la app.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {/* Compañía */}
+                      <div className="p-2.5 rounded-lg border border-gray-100 bg-gray-50 space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-medium text-gray-900">Compañía</p>
+                          {valet.documentation.companyComplete
+                            ? <span className="text-[10px] font-medium text-emerald-700 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Completa</span>
+                            : <span className="text-[10px] font-medium text-amber-700">Incompleta</span>}
+                        </div>
+                        {valet.documentation.company && (
+                          <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-2 gap-y-0.5 text-[11px]">
+                            {([
+                              ['Razón social', valet.documentation.company.legalName],
+                              ['Nombre comercial', valet.documentation.company.tradeName],
+                              ['Tipo', valet.documentation.company.entityType ? (TIPO_EMPRESA[valet.documentation.company.entityType] ?? valet.documentation.company.entityType) : null],
+                              ['Dirección', valet.documentation.company.address],
+                              ['Teléfono', valet.documentation.company.phone],
+                              ['Correo', valet.documentation.company.email],
+                              ['Representante', valet.documentation.company.authorizedRep],
+                            ] as const).map(([k, v]) => (
+                              <div key={k} className="contents">
+                                <dt className="text-gray-400">{k}</dt>
+                                <dd className={`break-words ${v ? 'text-gray-700' : 'text-gray-300'}`}>{v || '—'}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                        )}
+                      </div>
+
+                      {/* Acuerdo */}
+                      <div className="p-2.5 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-gray-900">Acuerdo de participación</p>
+                          <p className="text-[11px] text-gray-500">
+                            {valet.documentation.agreement === 'accepted'
+                              ? `Firmado${valet.documentation.agreementVersion ? ` · versión ${valet.documentation.agreementVersion}` : ''}${valet.documentation.agreementAcceptedAt ? ` · ${formatDate(valet.documentation.agreementAcceptedAt)}` : ''}`
+                              : 'Sin firmar la versión vigente'}
+                          </p>
+                        </div>
+                        {valet.documentation.agreement === 'accepted'
+                          ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          : <span className="text-[10px] font-medium text-amber-700 shrink-0">Pendiente</span>}
+                      </div>
+
+                      {/* W-9 */}
+                      <div className="p-2.5 rounded-lg border border-gray-100 bg-gray-50 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-medium text-gray-900">Formulario W-9</p>
+                          <div className="flex items-center gap-2">
+                            {valet.documentation.w9Url && (
+                              <a href={valet.documentation.w9Url} target="_blank" rel="noopener noreferrer"
+                                className="text-[10px] text-blue-600 hover:underline flex items-center gap-0.5">
+                                <ExternalLink className="w-3 h-3" /> Ver
+                              </a>
+                            )}
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-medium border ${W9_LABEL[valet.documentation.w9].class}`}>
+                              {W9_LABEL[valet.documentation.w9].label}
+                            </span>
+                          </div>
+                        </div>
+                        {valet.documentation.w9 !== 'missing' && valet.documentation.w9 !== 'approved' && (
+                          <div className="flex gap-2">
+                            {valet.documentation.w9 !== 'pending_review' && (
+                              <button onClick={() => marcarW9('pending_review')} disabled={!!w9Loading}
+                                className="flex-1 px-2 py-1 bg-amber-100 text-amber-800 hover:bg-amber-200 rounded text-[10px] font-medium disabled:opacity-50">
+                                {w9Loading === 'pending_review' ? '…' : 'Marcar en revisión'}
+                              </button>
+                            )}
+                            <button onClick={() => marcarW9('approved')} disabled={!!w9Loading}
+                              className="flex-1 px-2 py-1 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded text-[10px] font-medium disabled:opacity-50 flex items-center justify-center gap-1">
+                              {w9Loading === 'approved' ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />} Aprobar W-9
+                            </button>
+                          </div>
+                        )}
+                        {valet.documentation.w9Url && (
+                          <p className="text-[10px] text-gray-400">El enlace al archivo caduca en una hora; recarga la lista para uno nuevo.</p>
+                        )}
+                      </div>
+
+                      {faltantesDocumentacion(valet.documentation).length > 0 && (
+                        <p className="text-[11px] text-amber-700">
+                          No se puede aprobar hasta tener: {faltantesDocumentacion(valet.documentation).join(', ')}.
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
               )}

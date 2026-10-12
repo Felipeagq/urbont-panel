@@ -192,7 +192,15 @@ export default function Valets() {
                       </p>
                       <p className="text-xs text-gray-400">{money(v.commissionTotal)} ganados</p>
                     </div>
-                    <span className={`badge-sm w-fit ${BADGE[v.status]}`}>{VALET_STATUS[v.status].label}</span>
+                    <div className="flex flex-col gap-1 min-w-0">
+                      <span className={`badge-sm w-fit ${BADGE[v.status]}`}>{VALET_STATUS[v.status].label}</span>
+                      {/* Solo importa mientras la cuenta no está activa: es lo que bloquea aprobarla. */}
+                      {v.status === 'pending' && v.documentation && (
+                        v.documentation.accountDocumentation === 'ready'
+                          ? <span className="text-[10px] font-medium text-emerald-700">Lista para aprobar</span>
+                          : <span className="text-[10px] font-medium text-amber-700">Documentación pendiente</span>
+                      )}
+                    </div>
                     <ChevronRight className="w-4 h-4 text-gray-300" />
                   </div>
                 ))}

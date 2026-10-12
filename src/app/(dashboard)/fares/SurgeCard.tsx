@@ -155,6 +155,9 @@ export default function SurgeCard() {
               <div>
                 <p className="text-sm text-gray-900">
                   <span className="font-semibold tabular-nums">{estado.manualMultiplier?.toFixed(2)}×</span>
+                  {estado.manualMultiplier != null && estado.manualMultiplier < 1 && (
+                    <span className="text-emerald-700"> · descuento del {Math.round((1 - estado.manualMultiplier) * 100)} %</span>
+                  )}
                   {estado.manualReason && <span className="text-gray-600"> · «{estado.manualReason}»</span>}
                   {estado.manualSilent && (
                     <span className="ml-2 inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 align-middle text-[11px] text-gray-600">
@@ -195,6 +198,15 @@ export default function SurgeCard() {
                   placeholder="1.50"
                   className="mt-1 w-28 rounded-lg border border-gray-200 px-3 py-2 text-sm tabular-nums outline-none focus:border-gray-400"
                 />
+                <span className="mt-1 block text-[11px] text-gray-400 tabular-nums">
+                  {(() => {
+                    const v = Number(valorManual.replace(',', '.'));
+                    if (!valorManual || !Number.isFinite(v)) return `De ${estado.bounds.min.toFixed(2)}× a ${estado.bounds.max.toFixed(2)}×. Menos de 1 es descuento.`;
+                    if (v < 1) return `Descuento del ${Math.round((1 - v) * 100)} %`;
+                    if (v > 1) return `Recargo del ${Math.round((v - 1) * 100)} %`;
+                    return 'Precio normal';
+                  })()}
+                </span>
               </label>
               <label className="block flex-1 min-w-[12rem]">
                 <span className="text-xs text-gray-600">Motivo (opcional)</span>
