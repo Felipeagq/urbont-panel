@@ -4,15 +4,16 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { adminFetch, apiFetch } from '@/lib/api';
 import {
   Bell, Send, Users, Car, Search, X, RefreshCw, AlertTriangle, CheckCircle2,
-  Inbox, ChevronLeft, ChevronRight, BookOpen, Zap, ZapOff,
+  Inbox, ChevronLeft, ChevronRight, BookOpen, Zap, ZapOff, Smartphone,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatRelativeTime } from '@/lib/utils';
+import TapToPayLaunchTab from '@/components/TapToPayLaunchTab';
 
 type Audience = 'all' | 'passengers' | 'drivers' | 'valets';
 type Platform = 'all' | 'ios' | 'android' | 'web';
 type Mode = 'audience' | 'users';
-type Tab = 'send' | 'history' | 'catalog';
+type Tab = 'send' | 'history' | 'catalog' | 'tap_to_pay';
 
 interface CatalogEntry {
   key: string;
@@ -234,6 +235,7 @@ export default function NotificationsPage() {
           { id: 'send'    as Tab, label: 'Enviar',    icon: Send },
           { id: 'history' as Tab, label: 'Historial', icon: Inbox },
           { id: 'catalog' as Tab, label: 'Tipos',     icon: BookOpen },
+          { id: 'tap_to_pay' as Tab, label: 'Lanzamiento Tap to Pay on iPhone', icon: Smartphone },
         ]).map(t => (
           <button
             key={t.id}
@@ -605,6 +607,8 @@ export default function NotificationsPage() {
           )}
         </div>
       )}
+
+      {tab === 'tap_to_pay' && <TapToPayLaunchTab />}
 
       {tab === 'catalog' && (
         <div className="space-y-4">
