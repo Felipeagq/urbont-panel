@@ -211,9 +211,10 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
       const endpoint = action === 'approve' ? 'approve' :
                        action === 'reject' ? 'reject' :
                        'request-reupload';
-      const body = (action === 'reject' || action === 'reupload') ? { notes: docActionReason } : undefined;
+      // El backend lee `reason` en los dos; re-subida no mira `notes`.
+      const body = (action === 'reject' || action === 'reupload') ? { reason: docActionReason } : undefined;
 
-      await adminFetch(`/admin/documents/${docId}/${endpoint}`, {
+      await adminFetch(`/documents/${docId}/${endpoint}`, {
         method: 'POST',
         body: body ? JSON.stringify(body) : undefined,
       });
