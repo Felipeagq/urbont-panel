@@ -14,6 +14,7 @@ import DriverDrawer from '@/components/DriverDrawer';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBulkSelection, SelectCheckbox, BulkDeleteBar } from '@/components/BulkSelection';
 import DeleteAccountsDialog from '@/components/DeleteAccountsDialog';
+import DeletedAccountsDrawer from '@/components/DeletedAccountsDrawer';
 
 interface DriverDocument {
   id: string;
@@ -141,6 +142,8 @@ export default function Drivers() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | Driver['status']>('all');
+  // Las cuentas eliminadas, con la opción de reactivar las de borrado lógico.
+  const [verEliminadas, setVerEliminadas] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [suspendReason, setSuspendReason] = useState('');
@@ -315,6 +318,12 @@ export default function Drivers() {
             </span>
           </button>
         ))}
+        <button
+          onClick={() => setVerEliminadas(true)}
+          className="px-3 py-1.5 rounded-full text-xs font-medium border border-dashed border-gray-300 text-gray-500 bg-white hover:border-gray-400"
+        >
+          Eliminadas
+        </button>
       </div>
 
       {/* Search */}
@@ -680,6 +689,9 @@ export default function Drivers() {
         onDeleted={ids => { seleccion.remove(ids); void loadData(); }}
       />
     )}
+      {verEliminadas && (
+        <DeletedAccountsDrawer tipo="chauffeur" onClose={() => setVerEliminadas(false)} onReactivated={() => void loadData()} />
+      )}
     </>
   );
 }

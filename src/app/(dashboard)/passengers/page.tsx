@@ -13,6 +13,7 @@ import PassengerDrawer from '@/components/PassengerDrawer';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBulkSelection, SelectCheckbox, BulkDeleteBar } from '@/components/BulkSelection';
 import DeleteAccountsDialog from '@/components/DeleteAccountsDialog';
+import DeletedAccountsDrawer from '@/components/DeletedAccountsDrawer';
 
 interface Passenger {
   id: string;
@@ -58,6 +59,8 @@ export default function Passengers() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | Passenger['status']>('all');
+  // Las cuentas eliminadas, con la opción de reactivar las de borrado lógico.
+  const [verEliminadas, setVerEliminadas] = useState(false);
   const [selected, setSelected] = useState<Passenger | null>(null);
   const [borrandoLote, setBorrandoLote] = useState(false);
   // Borrar es sólo del owner, así que la selección también.
@@ -140,6 +143,12 @@ export default function Passengers() {
               </span>
             </button>
           ))}
+          <button
+            onClick={() => setVerEliminadas(true)}
+            className="px-3 py-1.5 rounded-full text-xs font-medium border border-dashed border-gray-300 text-gray-500 bg-white hover:border-gray-400"
+          >
+            Eliminadas
+          </button>
         </div>
 
         {/* Search */}
@@ -288,6 +297,9 @@ export default function Passengers() {
           onClose={() => setBorrandoLote(false)}
           onDeleted={ids => { seleccion.remove(ids); void loadData(); }}
         />
+      )}
+      {verEliminadas && (
+        <DeletedAccountsDrawer tipo="passenger" onClose={() => setVerEliminadas(false)} onReactivated={() => void loadData()} />
       )}
     </>
   );

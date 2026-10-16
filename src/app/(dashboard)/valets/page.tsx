@@ -8,6 +8,7 @@ import ValetDrawer, { VALET_STATUS, type Valet, type ValetStatus } from '@/compo
 import { useAuth } from '@/contexts/AuthContext';
 import { useBulkSelection, SelectCheckbox, BulkDeleteBar } from '@/components/BulkSelection';
 import DeleteAccountsDialog from '@/components/DeleteAccountsDialog';
+import DeletedAccountsDrawer from '@/components/DeletedAccountsDrawer';
 
 const FILTERS = ['all', 'pending', 'active', 'suspended', 'rejected'] as const;
 
@@ -39,6 +40,8 @@ export default function Valets() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('all');
+  // Las cuentas eliminadas, con la opción de reactivar las de borrado lógico.
+  const [verEliminadas, setVerEliminadas] = useState(false);
   const [selected, setSelected] = useState<Valet | null>(null);
   const [borrandoLote, setBorrandoLote] = useState(false);
   // Borrar es sólo del owner, así que la selección también.
@@ -107,6 +110,12 @@ export default function Valets() {
               <span className={`ml-1.5 font-bold ${filter === f ? 'text-(--brand)' : 'text-gray-400'}`}>{counts[f]}</span>
             </button>
           ))}
+          <button
+            onClick={() => setVerEliminadas(true)}
+            className="px-3 py-1.5 rounded-full text-xs font-medium border border-dashed border-gray-300 text-gray-500 bg-white hover:border-gray-400"
+          >
+            Eliminadas
+          </button>
         </div>
 
         <div className="relative max-w-sm">
@@ -220,6 +229,9 @@ export default function Valets() {
           onClose={() => setBorrandoLote(false)}
           onDeleted={ids => { seleccion.remove(ids); void loadData(); }}
         />
+      )}
+      {verEliminadas && (
+        <DeletedAccountsDrawer tipo="valet" onClose={() => setVerEliminadas(false)} onReactivated={() => void loadData()} />
       )}
     </>
   );
