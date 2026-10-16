@@ -47,6 +47,8 @@ export default function DeleteAccountsDialog({ targets, onClose, onDeleted }: {
   onDeleted: (ids: string[]) => void;
 }) {
   const [modo, setModo] = useState<Modo>('soft');
+  // Sin esto, una cuenta con un viaje activo o programado no se puede borrar.
+  const [cancelarViajes, setCancelarViajes] = useState(false);
   const [texto, setTexto] = useState('');
   const [progreso, setProgreso] = useState<number | null>(null);
   const busy = progreso !== null;
@@ -69,12 +71,18 @@ export default function DeleteAccountsDialog({ targets, onClose, onDeleted }: {
     const borrados: string[] = [];
     const fallos: string[] = [];
     const avisos: Aviso[] = [];
+    let viajesCancelados = 0;
 
     for (const [i, t] of lote.entries()) {
       setProgreso(i);
       try {
-        const r = await adminFetch(`${t.endpoint}${modo === 'hard' && !t.softOnly ? '?mode=hard' : ''}`, { method: 'DELETE' });
+        const params = new URLSearchParams();
+        if (modo === 'hard' && !t.softOnly) params.set('mode', 'hard');
+        if (cancelarViajes && !t.softOnly) params.set('cancelRides', '1');
+        const q = params.toString();
+        const r = await adminFetch(`${t.endpoint}${q ? `?${q}` : ''}`, { method: 'DELETE' });
         borrados.push(t.id);
+        viajesCancelados += Number(r?.cancelledRides) || 0;
         // El backend avisa por correo al usuario; si no salió (p. ej. sin correo), se dice.
         if (r?.notification) avisos.push(r.notification as Aviso);
       } catch (e) {
@@ -85,13 +93,14 @@ export default function DeleteAccountsDialog({ targets, onClose, onDeleted }: {
     setProgreso(null);
 
     const sinAviso = avisos.filter(a => !a.sent);
+    const extra = viajesCancelados ? ` Se cancelaron ${viajesCancelados} ${viajesCancelados === 1 ? 'viaje' : 'viajes'}.` : '';
     if (uno && borrados.length) {
       const aviso = avisos[0];
-      if (aviso && !aviso.sent) toast.warning(`${uno.name} fue eliminado. ${aviso.message}`);
-      else toast.success(aviso?.message ? `${uno.name} fue eliminado. ${aviso.message}` : `${uno.name} fue eliminado`);
+      if (aviso && !aviso.sent) toast.warning(`${uno.name} fue eliminado.${extra} ${aviso.message}`);
+      else toast.success(aviso?.message ? `${uno.name} fue eliminado.${extra} ${aviso.message}` : `${uno.name} fue eliminado.${extra}`);
     } else if (borrados.length) {
-      const resumen = `${borrados.length} ${borrados.length === 1 ? 'cuenta eliminada' : 'cuentas eliminadas'}`;
-      if (sinAviso.length) toast.warning(`${resumen}. ${sinAviso.length} sin aviso por correo (no tienen correo o falló el envío).`);
+      const resumen = `${borrados.length} ${borrados.length === 1 ? 'cuenta eliminada' : 'cuentas eliminadas'}.${extra}`;
+      if (sinAviso.length) toast.warning(`${resumen} ${sinAviso.length} sin aviso por correo (no tienen correo o falló el envío).`);
       else toast.success(resumen);
     }
     if (fallos.length) {
@@ -141,6 +150,15 @@ export default function DeleteAccountsDialog({ targets, onClose, onDeleted }: {
             {conSolicitudes && (
               <p className="text-[11px] text-gray-500">Las solicitudes sin cuenta se eliminan igual en los dos modos.</p>
             )}
+            <label className="flex gap-3 p-3 rounded-xl border border-gray-200 cursor-pointer hover:border-gray-300">
+              <input type="checkbox" checked={cancelarViajes} onChange={e => setCancelarViajes(e.target.checked)} disabled={busy} className="mt-0.5" />
+              <span>
+                <span className="block text-xs font-semibold text-gray-900">Cancelar también sus viajes activos y programados</span>
+                <span className="block text-[11px] text-gray-500 leading-relaxed mt-0.5">
+                  Se libera o se devuelve el cobro y se avisa a la otra persona. Si hay un viaje en curso, con el pasajero a bordo, no se borra nada.
+                </span>
+              </span>
+            </label>
             <p className="text-[11px] text-gray-500"><strong>Ninguno se puede deshacer.</strong></p>
           </div>
         )}
