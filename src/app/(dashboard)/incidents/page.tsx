@@ -4,12 +4,11 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { adminFetch } from '@/lib/api';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
 import {
-  AlertTriangle, RefreshCw, Search, CheckCircle2, ShieldAlert, Loader2, BellRing, BellOff,
+  AlertTriangle, RefreshCw, Search, CheckCircle2, ShieldAlert, Loader2,
   ChevronDown, ChevronUp, Car, Users, Zap, Siren, UserX, Wrench, LifeBuoy,
   MapPin, Camera, ExternalLink, ImageOff, CalendarClock, type LucideIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { beep } from '@/lib/alarmSound';
 import { Skeleton } from '@/components/ui/skeleton';
 import CleaningChargesTab, { contarLimpiezasPendientes } from '@/components/CleaningChargesTab';
 
@@ -80,9 +79,6 @@ const TYPE_CONFIG: Record<string, { label: string; icon: LucideIcon }> = {
   // Lo abre el servidor cuando el chofer no confirma su reserva a tiempo.
   reservation_unconfirmed: { label: 'Reserva sin confirmar', icon: CalendarClock },
 };
-
-/** Alarmas que el dispatcher tiene que atender llamando al chofer. */
-const TIPO_ALARMA = 'reservation_unconfirmed';
 
 const ROLE_LABELS: Record<string, string> = {
   driver: 'conductor',
@@ -218,18 +214,6 @@ export default function Incidents() {
     return () => clearInterval(t);
   }, [loadData]);
 
-  const [silenciada, setSilenciada] = useState(false);
-  const alarmas = incidents.filter(i => i.type === TIPO_ALARMA && i.status === 'open');
-
-  useEffect(() => {
-    if (silenciada || alarmas.length === 0) return;
-    beep();
-    const t = setInterval(beep, 20_000);
-    return () => clearInterval(t);
-  }, [silenciada, alarmas.length]);
-
-  // Si se atienden todas, vuelve a sonar la próxima sin tener que reactivarla.
-  useEffect(() => { if (alarmas.length === 0) setSilenciada(false); }, [alarmas.length]);
 
   const doAction = async (id: string, status: Status, body?: object) => {
     setActionLoading(`${id}-${status}`);
@@ -295,24 +279,6 @@ export default function Incidents() {
           </button>
         )}
       </div>
-
-      {tab === 'incidents' && alarmas.length > 0 && (
-        <div className="flex items-start justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
-          <div className="flex items-start gap-2 text-sm text-red-800">
-            <BellRing className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>
-              <strong>{alarmas.length} {alarmas.length === 1 ? 'reserva sin confirmar' : 'reservas sin confirmar'}.</strong>{' '}
-              El chofer no respondió al recordatorio. Llámalo; mientras tanto la reserva se está ofreciendo a otros.
-            </span>
-          </div>
-          <button
-            onClick={() => setSilenciada(s => !s)}
-            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-red-200 px-2.5 py-1.5 text-xs text-red-700 hover:bg-red-100"
-          >
-            {silenciada ? <><BellRing className="h-3.5 w-3.5" /> Activar sonido</> : <><BellOff className="h-3.5 w-3.5" /> Silenciar</>}
-          </button>
-        </div>
-      )}
 
       <div className="flex gap-2 border-b border-gray-100">
         {([['incidents', 'Incidentes', 0], ['cleaning', 'Limpieza', limpiezasPendientes]] as const).map(([id, label, n]) => (

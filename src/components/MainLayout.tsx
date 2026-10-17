@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import type { AdminRole } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { APP_VERSION } from '@/lib/version';
+import ReservationAlarm from '@/components/ReservationAlarm';
 const urbontLogo = '/urbont-logo.png';
 
 interface NavItem {
@@ -252,6 +253,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             </div>
           </div>
         </header>
+
+        {/* Reservas sin confirmar: se ve y suena en todas las páginas, no sólo
+            en Incidentes, para que nadie dependa de estar mirando la correcta. */}
+        <ReservationAlarm />
 
         {/* Content */}
         <main data-app-main className="flex-1 overflow-y-auto">
