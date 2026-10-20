@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { adminFetch } from '@/lib/api';
-import { formatDate, formatCurrency } from '@/lib/utils';
+import { formatDate, formatCurrency, formatUrbontId, normalizarIdBusqueda } from '@/lib/utils';
 import {
   Search, MapPin, Car, RefreshCw, AlertTriangle,
   ArrowRight, Clock, DollarSign, RotateCcw, X, CheckCircle2, CircleDashed, Phone
@@ -46,6 +46,8 @@ interface Ride {
   distance: string | number;
   duration: string | number;
   createdAt: string;
+  /** Respaldo: la API venía mandando sólo el snake_case y la fecha salía vacía. */
+  created_at?: string;
   completedAt?: string;
   cancelReason?: string | null;
   // Sólo en cancelados con registro de quién canceló (driver_ride_events).
@@ -159,7 +161,12 @@ export default function Rides() {
 
   const filtered = rides.filter(r => {
     const q = search.toLowerCase();
-    const matchSearch = r.passengerName?.toLowerCase().includes(q) || r.driverName?.toLowerCase().includes(q) || r.id.includes(q);
+    // Con el ID a la vista, buscar «URB-B50D-4430» tiene que valer igual que
+    // pegar el UUID entero: los guiones y el prefijo se ignoran.
+    const qId = normalizarIdBusqueda(search);
+    const matchId = qId.length >= 3 && normalizarIdBusqueda(r.id).startsWith(qId);
+    const matchSearch = !search || matchId
+      || r.passengerName?.toLowerCase().includes(q) || r.driverName?.toLowerCase().includes(q);
     const matchStatus = statusFilter === 'all' || r.status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -272,7 +279,7 @@ export default function Rides() {
                       return <span className={`badge-sm ${st.class}`}>{st.label}</span>;
                     })()}
                   </div>
-                  {detailRide && <p className="text-xs text-gray-400 mt-0.5">{formatDate(detailRide.createdAt)}</p>}
+                  {detailRide && <p className="text-xs text-gray-400 mt-0.5">{formatDate(detailRide.createdAt ?? detailRide.created_at)}</p>}
                 </div>
               </div>
               <button onClick={closeDetail} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
@@ -582,6 +589,12 @@ export default function Rides() {
                         <span className="text-gray-500 truncate">{ride.driverName || 'Sin asignar'}</span>
                       </div>
                       <p className="text-[11px] text-gray-400 mt-1">{VEHICLE_LABELS[ride.vehicleType] || ride.vehicleType}</p>
+                      <p
+                        className="text-[11px] font-mono text-gray-400 truncate mt-0.5"
+                        title="ID del viaje — el mismo que se puede buscar arriba"
+                      >
+                        {formatUrbontId(ride.id)}
+                      </p>
                     </div>
 
                     {/* Route */}
@@ -608,7 +621,7 @@ export default function Rides() {
                           <Clock className="w-3 h-3" />{ride.duration || '—'}
                         </span>
                       </div>
-                      <p className="text-[11px] text-gray-300 mt-0.5">{formatDate(ride.createdAt)}</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">{formatDate(ride.createdAt ?? ride.created_at)}</p>
                     </div>
 
                     {/* Status */}
