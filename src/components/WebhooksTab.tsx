@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { adminFetch } from '@/lib/api';
-import { formatDate, formatRelativeTime } from '@/lib/utils';
+import { formatCurrency, formatDate, formatRelativeTime } from '@/lib/utils';
 import {
   Loader2, CheckCircle2, XCircle, AlertCircle, MinusCircle,
   Webhook, RefreshCw, ShieldAlert, Link2, KeyRound,
@@ -38,8 +38,16 @@ interface EndpointRevisado {
   eventos: string[];
 }
 
+interface ItemContraste {
+  id: string;
+  importe: number;
+  fecha: string;
+  registrado: boolean;
+}
+
 interface Contraste {
   etiqueta: string;
+  detalle: ItemContraste[];
   enStripe: number;
   registrados: number;
   faltan: number;
@@ -71,15 +79,15 @@ const TONO: Record<Tono, { box: string; icon: string; title: string; note: strin
 
 const ICONO_TONO = { ok: CheckCircle2, error: XCircle, warn: AlertCircle, neutral: MinusCircle };
 
-function Tarjeta({ label, nota, tono, icon: Icon, extra, pista }: {
+function Tarjeta({ label, nota, tono, icon: Icon, extra, detalle }: {
   label: string; nota: string; tono: Tono; icon: React.ElementType; extra?: string;
-  /** Que significa el numero y que hacer con el. Va al tooltip nativo. */
-  pista?: string;
+  /** Lo que sale al pasar el cursor. Sin esto la tarjeta no tiene tooltip. */
+  detalle?: React.ReactNode;
 }) {
   const c = TONO[tono];
   const Chip = ICONO_TONO[tono];
-  return (
-    <div className={`rounded-xl border p-3.5 flex items-start gap-3 ${c.box} ${pista ? 'cursor-help' : ''}`} title={pista}>
+  const tarjeta = (
+    <div className={`rounded-xl border p-3.5 flex items-start gap-3 ${c.box} ${detalle ? 'cursor-help' : ''}`}>
       <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${c.icon}`}>
         <Icon className="w-5 h-5" />
       </div>
@@ -89,6 +97,100 @@ function Tarjeta({ label, nota, tono, icon: Icon, extra, pista }: {
         {extra && <p className={`text-[10px] ${c.note} opacity-70 truncate`}>{extra}</p>}
       </div>
       <Chip className={`w-4 h-4 ${c.chip} shrink-0`} />
+    </div>
+  );
+
+  if (!detalle) return tarjeta;
+  return (
+    <HoverCard delayDuration={200}>
+      <HoverCardTrigger asChild>{tarjeta}</HoverCardTrigger>
+      <HoverCardContent
+        side="bottom"
+        align="start"
+        className="max-w-none bg-white text-gray-800 border border-gray-200 shadow-lg p-0"
+      >
+        {detalle}
+      </HoverCardContent>
+    </HoverCard>
+  );
+}
+
+/** Un texto explicativo con el mismo aspecto que el resto de tooltips. */
+function Explicacion({ titulo, texto }: { titulo: string; texto: string }) {
+  return (
+    <div className="w-[340px] p-3 space-y-1">
+      <p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">{titulo}</p>
+      <p className="text-xs text-gray-700 leading-relaxed">{texto}</p>
+    </div>
+  );
+}
+
+/**
+ * Uno a uno lo que Stripe tiene en la ventana, y cuál ya quedó registrado.
+ *
+ * Se lista por id porque saber que "faltan 3" no sirve para nada: hay que saber
+ * CUÁLES, para ir a mirarlos en Stripe.
+ */
+function DetalleContraste({ x, dias }: { x: Contraste; dias: number }) {
+  const registrados = x.detalle.filter(d => d.registrado);
+  const faltan = x.detalle.filter(d => !d.registrado);
+
+  const Fila = ({ d }: { d: ItemContraste }) => (
+    <li className="flex items-center gap-2 py-1">
+      {d.registrado
+        ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+        : <XCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />}
+      <code className="text-[10px] font-mono text-gray-700 truncate flex-1" title={d.id}>{d.id}</code>
+      <span className="text-[11px] font-semibold text-gray-900 shrink-0">{formatCurrency(d.importe)}</span>
+      <span className="text-[10px] text-gray-400 shrink-0 w-[92px] text-right">{formatDate(d.fecha)}</span>
+    </li>
+  );
+
+  if (x.detalle.length === 0) {
+    return (
+      <Explicacion
+        titulo={`${x.etiqueta} · últimos ${dias} días`}
+        texto={`Stripe no tiene ${x.etiqueta.toLowerCase()} en esta ventana, así que no hay nada que comparar.`}
+      />
+    );
+  }
+
+  return (
+    <div className="w-[470px] p-3 space-y-2">
+      <div>
+        <p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">
+          {x.etiqueta} · últimos {dias} días
+        </p>
+        <p className={`text-xs font-semibold ${x.faltan > 0 ? 'text-red-700' : 'text-gray-900'}`}>
+          {registrados.length} de {x.detalle.length} registrados
+        </p>
+      </div>
+
+      <div className="max-h-[300px] overflow-y-auto border-t border-gray-100 pt-1">
+        {faltan.length > 0 && (
+          <>
+            <p className="text-[10px] uppercase tracking-wide text-red-600 font-semibold mt-1">
+              Faltan · {faltan.length}
+            </p>
+            <ul className="divide-y divide-gray-50">{faltan.map(d => <Fila key={d.id} d={d} />)}</ul>
+          </>
+        )}
+        {registrados.length > 0 && (
+          <>
+            <p className="text-[10px] uppercase tracking-wide text-emerald-600 font-semibold mt-2">
+              Registrados · {registrados.length}
+            </p>
+            <ul className="divide-y divide-gray-50">{registrados.map(d => <Fila key={d.id} d={d} />)}</ul>
+          </>
+        )}
+      </div>
+
+      {faltan.length > 0 && (
+        <p className="text-[10px] text-gray-500 border-t border-gray-100 pt-2 leading-relaxed">
+          Si el backend ya está desplegado, el webhook no está llegando: revisa la configuración de arriba.
+          El cron de reconciliación recupera lo que falte cada 6 horas.
+        </p>
+      )}
     </div>
   );
 }
@@ -146,17 +248,17 @@ function DetalleEndpoint({ e }: { e: EndpointRevisado }) {
         <div className="border-t border-gray-100 pt-2 max-h-[340px] overflow-y-auto space-y-3">
           <div>
             <p className="text-[10px] uppercase tracking-wide text-emerald-600 font-semibold mb-1">
-              Que el codigo atiende · {e.manejados.length}
+              Lo que el código atiende · {e.manejados.length}
             </p>
             {e.manejados.length === 0
-              ? <p className="text-[11px] text-amber-700">Ninguno. Este endpoint no entrega nada que el codigo use.</p>
+              ? <p className="text-[11px] text-amber-700">Ninguno. Este endpoint no entrega nada que el código use.</p>
               : <Lista eventos={e.manejados} atendidos />}
           </div>
 
           {ignorados.length > 0 && (
             <div>
               <p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold mb-1">
-                Que Stripe envia y el codigo ignora · {ignorados.length}
+                Lo que Stripe envía y el código ignora · {ignorados.length}
               </p>
               <Lista eventos={ignorados} atendidos={false} />
             </div>
@@ -262,11 +364,7 @@ export default function WebhooksTab() {
               nota={x.nota}
               tono={x.tono}
               icon={ShieldAlert}
-              pista={
-                x.faltan > 0
-                  ? `Stripe registro ${x.enStripe} y aqui quedaron ${x.registrados}. Si el backend ya esta desplegado, el webhook no esta llegando: revisa la configuracion de arriba. El cron de reconciliacion recupera lo que falte cada 6 horas.`
-                  : `Stripe registro ${x.enStripe} y aqui quedaron ${x.registrados}. Tener de mas es normal: el cron y los reembolsos hechos desde el panel escriben sin esperar al webhook.`
-              }
+              detalle={<DetalleContraste x={x} dias={salud.ventanaDias} />}
             />
           ))}
         </div>
@@ -284,14 +382,14 @@ export default function WebhooksTab() {
           nota={salud.secretos.principal ? 'Configurado' : 'Falta: el servidor rechaza todo lo que llega'}
           tono={salud.secretos.principal ? 'ok' : 'error'}
           icon={KeyRound}
-          pista="STRIPE_WEBHOOK_SECRET. Con el se comprueba que lo que llega viene de verdad de Stripe. Sin el, el servidor responde 400 a todo en produccion."
+          detalle={<Explicacion titulo="STRIPE_WEBHOOK_SECRET" texto="Con este secreto se comprueba que lo que llega viene de verdad de Stripe. Sin él, el servidor responde 400 a todo en producción." />}
         />
         <Tarjeta
           label="Secreto de firma · Connect"
           nota={salud.secretos.connect ? 'Configurado' : 'Sin configurar — los eventos de cuentas de choferes no se verifican'}
           tono={salud.secretos.connect ? 'ok' : 'warn'}
           icon={KeyRound}
-          pista="STRIPE_WEBHOOK_SECRET_CONNECT. Los eventos de las cuentas de los choferes se firman con otro secreto, asi que sin el no se verifica account.updated ni los payouts."
+          detalle={<Explicacion titulo="STRIPE_WEBHOOK_SECRET_CONNECT" texto="Los eventos de las cuentas de los choferes se firman con otro secreto, así que sin él no se verifica account.updated ni los payouts." />}
         />
       </div>
 
