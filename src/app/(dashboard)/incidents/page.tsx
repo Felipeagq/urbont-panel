@@ -11,6 +11,7 @@ import {
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import CleaningChargesTab, { contarLimpiezasPendientes } from '@/components/CleaningChargesTab';
+import PaymentEventsTab, { contarPagosAbiertos } from '@/components/PaymentEventsTab';
 
 /**
  * Incidentes: los reporta el conductor desde la pantalla Help de la app
@@ -189,9 +190,11 @@ export default function Incidents() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [resolutionTarget, setResolutionTarget] = useState<string | null>(null);
   const [resolutionText, setResolutionText] = useState('');
-  const [tab, setTab] = useState<'incidents' | 'cleaning'>('incidents');
+  const [tab, setTab] = useState<'incidents' | 'cleaning' | 'pagos'>('incidents');
   const [limpiezasPendientes, setLimpiezasPendientes] = useState(0);
+  const [pagosAbiertos, setPagosAbiertos] = useState(0);
   useEffect(() => { void contarLimpiezasPendientes().then(setLimpiezasPendientes); }, []);
+  useEffect(() => { void contarPagosAbiertos().then(setPagosAbiertos); }, []);
 
   const loadData = useCallback(() => {
     setLoading(true);
@@ -281,7 +284,7 @@ export default function Incidents() {
       </div>
 
       <div className="flex gap-2 border-b border-gray-100">
-        {([['incidents', 'Incidentes', 0], ['cleaning', 'Limpieza', limpiezasPendientes]] as const).map(([id, label, n]) => (
+        {([['incidents', 'Incidentes', 0], ['cleaning', 'Limpieza', limpiezasPendientes], ['pagos', 'Pagos', pagosAbiertos]] as const).map(([id, label, n]) => (
           <button
             key={id}
             onClick={() => setTab(id)}
@@ -295,7 +298,8 @@ export default function Incidents() {
         ))}
       </div>
 
-      {tab === 'cleaning' ? <CleaningChargesTab onCount={setLimpiezasPendientes} /> : (<>
+      {tab === 'pagos' ? <PaymentEventsTab onCount={setPagosAbiertos} />
+       : tab === 'cleaning' ? <CleaningChargesTab onCount={setLimpiezasPendientes} /> : (<>
       {/* SOS sin resolver: lo primero que debe ver operaciones */}
       {sosAbiertos > 0 && (
         <button

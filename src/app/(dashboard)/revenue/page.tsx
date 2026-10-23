@@ -9,7 +9,7 @@ import {
 } from 'recharts';
 import {
   TrendingUp, DollarSign, Car, Percent,
-  AlertTriangle, Star, RefreshCw
+  AlertTriangle, Star, RefreshCw, RotateCcw, ShieldAlert
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -18,6 +18,12 @@ interface RevenueData {
   totalRides: number;
   avgFare: number;
   completionRate: number;
+  /** Viajes completados cuyo cobro nunca se confirmó. El backend ya lo mandaba. */
+  uncollected: number;
+  uncollectedRides: number;
+  /** Lo devuelto al pasajero: reembolsos que salieron y contracargos perdidos. */
+  refunded: number;
+  chargebacksOpen: number;
   byVehicleType: Array<{ type: string; rides: number; revenue: number; avgFare: number }>;
   byDay: Array<{ date: string; rides: number; revenue: number }>;
   topDrivers: Array<{ id: string; name: string; rides: number; revenue: number; rating: number }>;
@@ -70,6 +76,10 @@ export default function Revenue() {
         totalRides: res.totalCompletedRides ?? 0,
         avgFare: res.avgFare ?? 0,
         completionRate: res.completionRate ?? 0,
+        uncollected: res.uncollectedAllTime ?? 0,
+        uncollectedRides: res.uncollectedRides ?? 0,
+        refunded: res.refundedAllTime ?? 0,
+        chargebacksOpen: res.chargebacksOpen ?? 0,
         byVehicleType: (res.byVehicleClass ?? []).map((v: any) => ({
           type: v.vehicleClass,
           rides: v.rides ?? 0,
@@ -160,6 +170,47 @@ export default function Revenue() {
               <div>
                 <p className="text-xs text-gray-500">{kpi.label}</p>
                 <p className="text-xl font-bold text-gray-900 mt-0.5">{kpi.value}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Lo que no entró y lo que volvió a salir. El "Ingreso Total" de arriba es
+          lo FACTURADO: estas dos tarjetas dicen cuánto de eso se quedó. */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        {[
+          {
+            label: 'No cobrado',
+            value: formatCurrency(data.uncollected),
+            sub: `${data.uncollectedRides} viaje${data.uncollectedRides === 1 ? '' : 's'} completado${data.uncollectedRides === 1 ? '' : 's'} sin cobro confirmado`,
+            icon: AlertTriangle, iconBg: 'bg-amber-50', iconColor: 'text-amber-600',
+          },
+          {
+            label: 'Devuelto',
+            value: formatCurrency(data.refunded),
+            sub: 'Reembolsos y contracargos perdidos',
+            icon: RotateCcw, iconBg: 'bg-red-50', iconColor: 'text-red-600',
+          },
+          {
+            label: 'Contracargos abiertos',
+            value: data.chargebacksOpen.toLocaleString(),
+            sub: data.chargebacksOpen > 0 ? 'Tienen plazo para responder en Stripe' : 'Nada pendiente de responder',
+            icon: ShieldAlert,
+            iconBg: data.chargebacksOpen > 0 ? 'bg-red-50' : 'bg-gray-50',
+            iconColor: data.chargebacksOpen > 0 ? 'text-red-600' : 'text-gray-400',
+          },
+        ].map((kpi) => {
+          const K = kpi.icon;
+          return (
+            <div key={kpi.label} className="stat-card flex items-start gap-4">
+              <div className={`w-10 h-10 rounded-xl ${kpi.iconBg} flex items-center justify-center shrink-0`}>
+                <K className={`w-5 h-5 ${kpi.iconColor}`} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-gray-500">{kpi.label}</p>
+                <p className="text-xl font-bold text-gray-900 mt-0.5">{kpi.value}</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">{kpi.sub}</p>
               </div>
             </div>
           );

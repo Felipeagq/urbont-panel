@@ -23,6 +23,8 @@ interface MoneyBreakdown {
   cargoEspera: number;
   cargoNoShow: number;
   descuentoPromo: number;
+  /** Lo devuelto al pasajero: reembolsos que salieron y contracargos perdidos. */
+  reembolsado: number;
   comisionUrbont: number;
   /** Lo del chofer POR EL VIAJE, sin propina. Es la pareja de comisionUrbont: las dos suman cobradoAlPasajero. */
   gananciaChoferViaje: number;
@@ -52,8 +54,18 @@ interface Ride {
   cancelReason?: string | null;
   // Sólo en cancelados con registro de quién canceló (driver_ride_events).
   cancelledBy?: 'driver' | 'system';
+  /** 'paid' | 'refunded' | 'failed' | 'pending'. El estado del cobro, aparte del operativo. */
+  paymentStatus?: string | null;
   driverCancelReason?: string | null;
 }
+
+// El estado del cobro va aparte del operativo: un viaje reembolsado sigue
+// siendo un viaje completado. Antes el reembolso intentaba escribirse en
+// `ride_status`, que no admite ese valor, y no se veía en ningún sitio.
+const PAYMENT_CONFIG: Record<string, { label: string; class: string }> = {
+  refunded: { label: 'Reembolsado', class: 'bg-amber-50 text-amber-700 border-amber-200' },
+  failed:   { label: 'Cobro falló', class: 'bg-red-50 text-red-700 border-red-200' },
+};
 
 const STATUS_CONFIG: Record<string, { label: string; class: string }> = {
   completed:   { label: 'Completado',  class: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
@@ -144,11 +156,15 @@ export default function Rides() {
     if (!refundTarget) return;
     setActionLoading(true);
     try {
-      await adminFetch(`/rides/${refundTarget.id}/refund`, {
+      const r = await adminFetch(`/rides/${refundTarget.id}/refund`, {
         method: 'POST',
         body: JSON.stringify(refundAmount ? { amount: parseFloat(refundAmount) } : {}),
-      });
-      toast.success('Reembolso procesado correctamente');
+      }) as { amount?: number };
+      // Se dice el importe: en un reembolso parcial, "procesado correctamente"
+      // no deja claro cuánto se devolvió de verdad.
+      toast.success(r?.amount != null
+        ? `Se devolvieron ${formatCurrency(r.amount)} al pasajero`
+        : 'Reembolso procesado correctamente');
       setRefundTarget(null);
       setRefundAmount('');
       loadData();
@@ -276,7 +292,11 @@ export default function Rides() {
                     <h2 className="text-base font-bold text-gray-900 leading-tight">Detalle del viaje</h2>
                     {detailRide && (() => {
                       const st = STATUS_CONFIG[detailRide.status] ?? { label: detailRide.status, class: 'bg-gray-50 text-gray-600 border-gray-200' };
-                      return <span className={`badge-sm ${st.class}`}>{st.label}</span>;
+                      const pago = detailRide.paymentStatus ? PAYMENT_CONFIG[detailRide.paymentStatus] : null;
+                      return (<>
+                        <span className={`badge-sm ${st.class}`}>{st.label}</span>
+                        {pago && <span className={`badge-sm ${pago.class}`}>{pago.label}</span>}
+                      </>);
                     })()}
                   </div>
                   {detailRide && <p className="text-xs text-gray-400 mt-0.5">{formatDate(detailRide.createdAt ?? detailRide.created_at)}</p>}
@@ -480,7 +500,7 @@ export default function Rides() {
                     )}
 
                     {/* Otros cargos registrados en el viaje. La espera ya no va aquí: es parte del precio. */}
-                    {(detailMoney.cargoNoShow > 0 || detailMoney.descuentoPromo > 0) && (
+                    {(detailMoney.cargoNoShow > 0 || detailMoney.descuentoPromo > 0 || detailMoney.reembolsado > 0) && (
                       <div className="mt-3 space-y-1.5">
                         {detailMoney.cargoNoShow > 0 && (
                           <div className="flex items-center justify-between text-xs">
@@ -492,6 +512,12 @@ export default function Rides() {
                           <div className="flex items-center justify-between text-xs">
                             <span className="text-gray-500">Descuento promocional</span>
                             <span className="text-red-500">−{formatCurrency(detailMoney.descuentoPromo)}</span>
+                          </div>
+                        )}
+                        {detailMoney.reembolsado > 0 && (
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-gray-500">Devuelto al pasajero</span>
+                            <span className="text-red-600 font-semibold">−{formatCurrency(detailMoney.reembolsado)}</span>
                           </div>
                         )}
                       </div>
@@ -627,6 +653,11 @@ export default function Rides() {
                     {/* Status */}
                     <div className="min-w-0">
                       <span className={`badge-sm ${st.class}`}>{st.label}</span>
+                      {ride.paymentStatus && PAYMENT_CONFIG[ride.paymentStatus] && (
+                        <span className={`badge-sm ml-1 ${PAYMENT_CONFIG[ride.paymentStatus].class}`}>
+                          {PAYMENT_CONFIG[ride.paymentStatus].label}
+                        </span>
+                      )}
                       {ride.status === 'cancelled' && (ride.driverCancelReason || ride.cancelReason) && (
                         <p className="text-[11px] text-gray-400 mt-1 truncate">
                           {ride.cancelledBy ? `${CANCELLED_BY_LABELS[ride.cancelledBy]}: ` : ''}
