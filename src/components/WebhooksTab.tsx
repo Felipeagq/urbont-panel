@@ -7,6 +7,9 @@ import {
   Loader2, CheckCircle2, XCircle, AlertCircle, MinusCircle,
   Webhook, RefreshCw, ShieldAlert, Link2, KeyRound,
 } from 'lucide-react';
+import {
+  Tooltip as HoverCard, TooltipTrigger as HoverCardTrigger, TooltipContent as HoverCardContent,
+} from '@/components/ui/tooltip';
 
 /**
  * ¿Están llegando los webhooks de Stripe?
@@ -32,6 +35,7 @@ interface EndpointRevisado {
   apiVersion: string | null;
   totalEventos: number;
   manejados: string[];
+  eventos: string[];
 }
 
 interface Contraste {
@@ -67,13 +71,15 @@ const TONO: Record<Tono, { box: string; icon: string; title: string; note: strin
 
 const ICONO_TONO = { ok: CheckCircle2, error: XCircle, warn: AlertCircle, neutral: MinusCircle };
 
-function Tarjeta({ label, nota, tono, icon: Icon, extra }: {
+function Tarjeta({ label, nota, tono, icon: Icon, extra, pista }: {
   label: string; nota: string; tono: Tono; icon: React.ElementType; extra?: string;
+  /** Que significa el numero y que hacer con el. Va al tooltip nativo. */
+  pista?: string;
 }) {
   const c = TONO[tono];
   const Chip = ICONO_TONO[tono];
   return (
-    <div className={`rounded-xl border p-3.5 flex items-start gap-3 ${c.box}`}>
+    <div className={`rounded-xl border p-3.5 flex items-start gap-3 ${c.box} ${pista ? 'cursor-help' : ''}`} title={pista}>
       <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${c.icon}`}>
         <Icon className="w-5 h-5" />
       </div>
@@ -83,6 +89,80 @@ function Tarjeta({ label, nota, tono, icon: Icon, extra }: {
         {extra && <p className={`text-[10px] ${c.note} opacity-70 truncate`}>{extra}</p>}
       </div>
       <Chip className={`w-4 h-4 ${c.chip} shrink-0`} />
+    </div>
+  );
+}
+
+/**
+ * El detalle al pasar el cursor por un endpoint: todos sus eventos, uno a uno.
+ *
+ * Se agrupan en los que el codigo atiende y los que ignora, porque la pregunta
+ * que trae a alguien a esta pantalla es siempre la misma —"¿esto que me
+ * interesa esta llegando?"— y en una lista plana de 44 nombres los 12 que
+ * importan quedarian enterrados.
+ */
+function DetalleEndpoint({ e }: { e: EndpointRevisado }) {
+  const ignorados = e.eventos.filter(ev => !e.manejados.includes(ev));
+  const comodin = e.eventos.includes('*');
+
+  const Lista = ({ eventos, atendidos }: { eventos: string[]; atendidos: boolean }) => (
+    <ul className="space-y-0.5">
+      {eventos.map(ev => (
+        <li key={ev} className="flex items-center gap-1.5">
+          {atendidos
+            ? <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+            : <MinusCircle className="w-3 h-3 text-gray-300 shrink-0" />}
+          <code className={`text-[10px] font-mono ${atendidos ? 'text-emerald-800' : 'text-gray-400'}`}>
+            {ev}
+          </code>
+        </li>
+      ))}
+    </ul>
+  );
+
+  return (
+    <div className="w-[380px] p-3 space-y-2.5">
+      <div>
+        <p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">
+          {e.esConnect ? 'Endpoint de Connect' : 'Endpoint principal'}
+        </p>
+        <p className="text-xs font-semibold text-gray-900 break-all">{e.url}</p>
+        <p className="text-[10px] text-gray-500 font-mono mt-0.5">
+          {e.id}{e.apiVersion ? ` · API ${e.apiVersion}` : ''}
+        </p>
+      </div>
+
+      {!e.activo && (
+        <p className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-md px-2 py-1">
+          Desactivado en Stripe: no entrega nada.
+        </p>
+      )}
+
+      {comodin ? (
+        <p className="text-[11px] text-gray-600 border-t border-gray-100 pt-2">
+          Suscrito a <code className="font-mono">*</code>: entrega cualquier evento.
+        </p>
+      ) : (
+        <div className="border-t border-gray-100 pt-2 max-h-[340px] overflow-y-auto space-y-3">
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-emerald-600 font-semibold mb-1">
+              Que el codigo atiende · {e.manejados.length}
+            </p>
+            {e.manejados.length === 0
+              ? <p className="text-[11px] text-amber-700">Ninguno. Este endpoint no entrega nada que el codigo use.</p>
+              : <Lista eventos={e.manejados} atendidos />}
+          </div>
+
+          {ignorados.length > 0 && (
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold mb-1">
+                Que Stripe envia y el codigo ignora · {ignorados.length}
+              </p>
+              <Lista eventos={ignorados} atendidos={false} />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -176,7 +256,18 @@ export default function WebhooksTab() {
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {salud.contrastes.map(x => (
-            <Tarjeta key={x.etiqueta} label={x.etiqueta} nota={x.nota} tono={x.tono} icon={ShieldAlert} />
+            <Tarjeta
+              key={x.etiqueta}
+              label={x.etiqueta}
+              nota={x.nota}
+              tono={x.tono}
+              icon={ShieldAlert}
+              pista={
+                x.faltan > 0
+                  ? `Stripe registro ${x.enStripe} y aqui quedaron ${x.registrados}. Si el backend ya esta desplegado, el webhook no esta llegando: revisa la configuracion de arriba. El cron de reconciliacion recupera lo que falte cada 6 horas.`
+                  : `Stripe registro ${x.enStripe} y aqui quedaron ${x.registrados}. Tener de mas es normal: el cron y los reembolsos hechos desde el panel escriben sin esperar al webhook.`
+              }
+            />
           ))}
         </div>
         <p className="text-[11px] text-gray-400 mt-3">
@@ -193,12 +284,14 @@ export default function WebhooksTab() {
           nota={salud.secretos.principal ? 'Configurado' : 'Falta: el servidor rechaza todo lo que llega'}
           tono={salud.secretos.principal ? 'ok' : 'error'}
           icon={KeyRound}
+          pista="STRIPE_WEBHOOK_SECRET. Con el se comprueba que lo que llega viene de verdad de Stripe. Sin el, el servidor responde 400 a todo en produccion."
         />
         <Tarjeta
           label="Secreto de firma · Connect"
           nota={salud.secretos.connect ? 'Configurado' : 'Sin configurar — los eventos de cuentas de choferes no se verifican'}
           tono={salud.secretos.connect ? 'ok' : 'warn'}
           icon={KeyRound}
+          pista="STRIPE_WEBHOOK_SECRET_CONNECT. Los eventos de las cuentas de los choferes se firman con otro secreto, asi que sin el no se verifica account.updated ni los payouts."
         />
       </div>
 
@@ -207,7 +300,9 @@ export default function WebhooksTab() {
         <p className="text-sm font-semibold text-gray-900 mb-3">Endpoints en Stripe</p>
         <div className="space-y-2">
           {salud.endpoints.map(e => (
-            <div key={e.id} className="border border-gray-100 rounded-xl p-3.5 flex items-start gap-3">
+            <HoverCard key={e.id} delayDuration={200}>
+              <HoverCardTrigger asChild>
+            <div className="border border-gray-100 rounded-xl p-3.5 flex items-start gap-3 cursor-help hover:bg-gray-50/70 transition-colors">
               <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
                 e.activo ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-400'
               }`}>
@@ -229,6 +324,15 @@ export default function WebhooksTab() {
                 <p className="text-[10px] text-gray-400 font-mono mt-0.5">{e.id}</p>
               </div>
             </div>
+              </HoverCardTrigger>
+              <HoverCardContent
+                side="bottom"
+                align="start"
+                className="max-w-none bg-white text-gray-800 border border-gray-200 shadow-lg p-0"
+              >
+                <DetalleEndpoint e={e} />
+              </HoverCardContent>
+            </HoverCard>
           ))}
         </div>
       </div>
