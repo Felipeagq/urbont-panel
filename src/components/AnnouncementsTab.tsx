@@ -30,12 +30,25 @@ const IDIOMAS = [
 
 type Idioma = (typeof IDIOMAS)[number]['id'];
 
+/**
+ * Sin valets a propósito: su panel no tiene buzón, así que un aviso dirigido a
+ * ellos no llegaría a ninguna parte. El servidor sigue aceptando `concierge`
+ * por si alguno quedó creado antes, pero aquí no se ofrece para no prometer
+ * algo que nadie vería.
+ */
 const AUDIENCIAS = [
-  { id: 'all', label: 'Todos' },
-  { id: 'passenger', label: 'Pasajeros' },
-  { id: 'driver', label: 'Conductores' },
-  { id: 'concierge', label: 'Valets' },
+  { id: 'all', label: 'Pasajeros y conductores' },
+  { id: 'passenger', label: 'Solo pasajeros' },
+  { id: 'driver', label: 'Solo conductores' },
 ] as const;
+
+/** Para los que ya existan con una audiencia que ya no se ofrece. */
+const ETIQUETA_AUDIENCIA: Record<string, string> = {
+  all: 'Pasajeros y conductores',
+  passenger: 'Solo pasajeros',
+  driver: 'Solo conductores',
+  concierge: 'Valets · no tienen buzón',
+};
 
 const TIPOS = [
   { id: 'news', label: 'Noticia' },
@@ -370,7 +383,7 @@ export default function AnnouncementsTab() {
                         <p className="text-sm font-semibold text-gray-900">{a.contenido?.en?.title ?? '—'}</p>
                         <span className={`badge-sm ${st.class}`}>{st.label}</span>
                         <span className="badge-sm bg-gray-50 text-gray-600 border-gray-200">
-                          {AUDIENCIAS.find(x => x.id === a.audiencia)?.label ?? a.audiencia}
+                          {ETIQUETA_AUDIENCIA[a.audiencia] ?? a.audiencia}
                         </span>
                       </div>
                       <p className="text-xs text-gray-500 mt-1 line-clamp-2">{a.contenido?.en?.description}</p>
