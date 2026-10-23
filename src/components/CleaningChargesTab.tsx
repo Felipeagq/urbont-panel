@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { adminFetch } from '@/lib/api';
-import { formatRelativeTime } from '@/lib/utils';
+import { formatRelativeTime, parseServerDate } from '@/lib/utils';
 import { Loader2, CheckCircle2, XCircle, ChevronDown, ChevronUp, Sparkles, ImageOff, ExternalLink, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -46,7 +46,7 @@ const resuelto = (c: Cargo) => c.status === 'charged' || c.status === 'rejected'
 
 /** Pendientes primero (el más antiguo arriba); resueltos abajo (el más reciente arriba). */
 function ordenar(lista: Cargo[]): Cargo[] {
-  const t = (v: string | null) => (v ? new Date(v).getTime() : 0);
+  const t = (v: string | null) => (v ? parseServerDate(v).getTime() : 0);
   const pendientes = lista.filter(c => !resuelto(c)).sort((a, b) => t(a.submitted_at) - t(b.submitted_at));
   const hechos = lista.filter(resuelto).sort((a, b) => t(b.reviewed_at ?? b.submitted_at) - t(a.reviewed_at ?? a.submitted_at));
   return [...pendientes, ...hechos];

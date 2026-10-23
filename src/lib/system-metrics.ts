@@ -1,3 +1,4 @@
+import { parseServerDate } from './utils';
 /**
  * Lectura de `GET /api/admin/system`.
  *
@@ -115,7 +116,7 @@ export function statusMeta(value: string | undefined): { label: string; tone: To
  */
 export function hace(iso: string | null | undefined): string {
   if (!iso) return 'sin verificar';
-  const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  const min = Math.floor((Date.now() - parseServerDate(iso).getTime()) / 60000);
   if (!Number.isFinite(min)) return 'sin verificar';
   if (min < 1) return 'recién';
   if (min < 60) return `hace ${min} min`;

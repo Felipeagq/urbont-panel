@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { adminFetch } from '@/lib/api';
-import { formatCurrency, formatRelativeTime, formatUrbontId } from '@/lib/utils';
+import { formatCurrency, formatRelativeTime, formatUrbontId, formatDay, parseServerDate } from '@/lib/utils';
 import { Loader2, AlertTriangle, Banknote, RotateCcw, ShieldAlert, CreditCard, ExternalLink } from 'lucide-react';
 
 /**
@@ -80,7 +80,7 @@ export default function PaymentEventsTab({ onCount }: { onCount?: (n: number) =>
         // Abiertos primero; dentro de cada grupo, lo más reciente arriba.
         lista.sort((a, b) => {
           if (resuelto(a) !== resuelto(b)) return resuelto(a) ? 1 : -1;
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          return parseServerDate(b.createdAt).getTime() - parseServerDate(a.createdAt).getTime();
         });
         setMovimientos(lista);
         onCount?.(lista.filter(m => !resuelto(m)).length);
@@ -178,7 +178,7 @@ export default function PaymentEventsTab({ onCount }: { onCount?: (n: number) =>
                   {/* El plazo es lo único accionable de un contracargo abierto */}
                   {!resuelto(m) && m.kind === 'chargeback' && plazo && (
                     <p className="text-xs text-red-700 font-medium mt-1.5">
-                      Responder en Stripe antes del {new Date(plazo).toLocaleDateString('es', { day: 'numeric', month: 'long' })}
+                      Responder en Stripe antes del {formatDay(plazo)}
                     </p>
                   )}
 

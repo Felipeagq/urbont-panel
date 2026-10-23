@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { BellOff, BellRing, Phone } from 'lucide-react';
 import { adminFetch } from '@/lib/api';
 import { beep } from '@/lib/alarmSound';
+import { parseServerDate } from '@/lib/utils';
 
 /**
  * Aviso de reservas que el chofer no confirmó, en todas las páginas del panel.
@@ -39,7 +40,9 @@ const PITIDO_CADA = 20_000;
 /** "12 min" / "1 h 05 min" desde ese momento. Vacío si la fecha no sirve. */
 export function desdeHace(iso: string | null | undefined, ahora: number = Date.now()): string {
   if (!iso) return '';
-  const t = new Date(iso).getTime();
+  // Sin esto, una fecha sin zona se leia 5 h adelantada y el `Math.max(0, …)`
+  // de abajo dejaba toda reserva pendiente en "0 min".
+  const t = parseServerDate(iso).getTime();
   if (!Number.isFinite(t)) return '';
   const min = Math.max(0, Math.floor((ahora - t) / 60_000));
   if (min < 60) return `${min} min`;
