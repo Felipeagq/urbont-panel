@@ -14,6 +14,7 @@ import type { AdminRole } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { APP_VERSION } from '@/lib/version';
 import ReservationAlarm from '@/components/ReservationAlarm';
+import SupportBadge from '@/components/SupportBadge';
 const urbontLogo = '/urbont-logo.png';
 
 interface NavItem {
@@ -86,6 +87,9 @@ function NavGroup({ label, items, location, onNavigate }: {
               >
                 <Icon className="w-4 h-4 shrink-0" />
                 <span className="flex-1 text-[13px]">{item.label}</span>
+                {/* Por ahora solo Soporte lleva contador. Si algún día lo lleva
+                    otra sección, esto pasa a ser un campo de NavItem. */}
+                {item.name === 'support' && <SupportBadge />}
                 {isActive && <ChevronRight className="w-3.5 h-3.5 opacity-60" />}
               </div>
             </Link>
