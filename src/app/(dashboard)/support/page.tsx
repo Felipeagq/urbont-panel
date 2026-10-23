@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { adminFetch } from '@/lib/api';
-import { formatDate, formatRelativeTime } from '@/lib/utils';
+import { formatDate, formatRelativeTime, parseServerDate } from '@/lib/utils';
 import {
   Headphones, RefreshCw, Search, ChevronDown, ChevronUp,
   Send, X, AlertTriangle, Loader2, User, Clock, ArrowUp, Siren, Phone, Car, Mail,
@@ -97,7 +97,9 @@ export default function Support() {
   const [replyText, setReplyText] = useState<Record<string, string>>({});
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | Status>('all');
+  // Abiertos por defecto: lo que queda por atender es a lo que se entra, y
+  // "Todos" mezclaba los cerrados con lo pendiente.
+  const [statusFilter, setStatusFilter] = useState<'all' | Status>('open');
   const [priorityFilter, setPriorityFilter] = useState<'all' | Priority>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
@@ -181,7 +183,15 @@ export default function Support() {
     const matchPriority = priorityFilter === 'all' || t.priority === priorityFilter;
     const matchCategory = categoryFilter === 'all' || t.category === categoryFilter;
     return matchSearch && matchStatus && matchPriority && matchCategory;
-  });
+  })
+    // Lo más reciente arriba. El servidor los manda ordenados por prioridad
+    // primero, y eso enterraba un ticket de hace un minuto debajo de uno de
+    // hace meses solo porque aquel estaba marcado como alto. La prioridad se
+    // ve igual en la etiqueta y tiene su propio filtro.
+    //
+    // `parseServerDate` y no `new Date` a secas: la API manda algunas fechas
+    // sin zona horaria, y leerlas como hora local descolocaba el orden.
+    .sort((a, b) => parseServerDate(b.createdAt).getTime() - parseServerDate(a.createdAt).getTime());
 
   const counts = {
     all: tickets.length,
