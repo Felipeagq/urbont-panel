@@ -12,6 +12,7 @@ import {
   AlertTriangle, Star, RefreshCw, RotateCcw, ShieldAlert
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import WebhooksTab from '@/components/WebhooksTab';
 
 interface RevenueData {
   totalRevenue: number;
@@ -68,6 +69,8 @@ export default function Revenue() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [chartView, setChartView] = useState<'revenue' | 'rides'>('revenue');
+
+  const [tab, setTab] = useState<'resumen' | 'webhooks'>('resumen');
 
   const loadData = () => {
     adminFetch('/revenue')
@@ -148,10 +151,28 @@ export default function Revenue() {
           <h1 className="page-title" data-testid="page-title">Ingresos y Analíticas</h1>
           <p className="text-sm text-gray-400 mt-0.5">Resumen financiero de la plataforma</p>
         </div>
-        <button onClick={loadData} className="btn-outline flex items-center gap-2 text-xs">
-          <RefreshCw className="w-3.5 h-3.5" /> Actualizar
-        </button>
+        {tab === 'resumen' && (
+          <button onClick={loadData} className="btn-outline flex items-center gap-2 text-xs">
+            <RefreshCw className="w-3.5 h-3.5" /> Actualizar
+          </button>
+        )}
       </div>
+
+      <div className="flex gap-2 border-b border-gray-100">
+        {([['resumen', 'Resumen'], ['webhooks', 'Webhooks']] as const).map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              tab === id ? 'border-(--brand) text-(--brand)' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'webhooks' ? <WebhooksTab /> : (<>
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -349,6 +370,7 @@ export default function Revenue() {
           </table>
         </div>
       </div>
+      </>)}
     </div>
   );
 }
