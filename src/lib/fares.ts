@@ -24,8 +24,16 @@ export interface FareConfig {
   waitPerMin: number;
   /** Reserva. Sólo la pagan los viajes programados. */
   serviceFee: number;
+  /** Reserva por hora: precio de cada hora y límites del bloque. */
   perHour: number;
   minHours: number;
+  /** Opcionales: un backend anterior a la reserva por hora no los manda. */
+  maxHours?: number;
+  /** Millas incluidas por cada hora reservada. */
+  milesPerHour?: number;
+  /** Cada milla por encima de las incluidas. */
+  extraMileFee?: number;
+  hourlyEnabled?: boolean;
 }
 
 /** Políticas que publica el backend en `GET /api/admin/fares` (`pricingPolicy`). */
@@ -41,6 +49,12 @@ export interface PricingPolicy {
   valetExempt: boolean;
   longPickupFee: number;
   longPickupThresholdMinutes: number;
+  bookingFee?: number;
+  hourly?: {
+    overtimeIncrementMinutes: number;
+    overtimeGraceMinutes: number;
+    endingSoonMinutes: number;
+  };
 }
 
 /** Deben coincidir con PLATFORM_COMMISSION, TIER1_MAX_MILES y TIER2_MAX_MILES del backend. */
@@ -84,11 +98,52 @@ export function estimarPorDistancia(f: FareConfig, millas: number, minutos: numb
   return r2(subtotal + r2(subtotal * PLATFORM_COMMISSION));
 }
 
-/** Espejo de `calculateHourlyFare`. Cobra siempre el bloque mínimo. */
-export function estimarPorHora(f: FareConfig, horas: number, programado = false): number {
+/** Deben coincidir con BOOKING_FEE_USD y HOURLY_OVERTIME_* del backend. */
+export const BOOKING_FEE_USD = 2.50;
+export const OVERTIME_INCREMENT_MINUTES = 15;
+export const OVERTIME_GRACE_MINUTES = 5;
+
+export interface EstimacionPorHora {
+  /** Horas × precio por hora. */
+  bloque: number;
+  /** Lo que se paga al reservar: bloque, reserva de la clase y booking fee. */
+  alReservar: number;
+  incluidas: number;
+  millasExtra: number;
+  cargoMillas: number;
+  bloquesExtra: number;
+  cargoTiempo: number;
+  /** Lo que se cobra aparte al terminar, sin impuesto. */
+  extra: number;
+  total: number;
+}
+
+/**
+ * Espejo de `calculateHourlyFare` y de `calcularExtras` (hourlyBooking.ts), sin
+ * recargo ni impuesto. Lo que se paga al reservar más lo que se cobra al terminar
+ * si se recorren `millas` y se pasa `minutosDeMas` del tiempo reservado.
+ */
+export function estimarReservaPorHora(
+  f: FareConfig,
+  horas: number,
+  millas: number,
+  minutosDeMas: number,
+  opts: { bookingFee?: number; incremento?: number; cortesia?: number } = {},
+): EstimacionPorHora {
+  const incremento = opts.incremento ?? OVERTIME_INCREMENT_MINUTES;
+  const cortesia = opts.cortesia ?? OVERTIME_GRACE_MINUTES;
   const horasCobradas = Math.max(f.minHours, horas);
-  const cargo         = r2(horasCobradas * f.perHour);
-  const reserva       = programado ? r2(f.serviceFee) : 0;
-  const subtotal      = r2(cargo + reserva);
-  return r2(subtotal + r2(subtotal * PLATFORM_COMMISSION));
+  const bloque = r2(horasCobradas * f.perHour);
+  const alReservar = r2(bloque + r2(f.serviceFee) + (opts.bookingFee ?? BOOKING_FEE_USD));
+
+  const incluidas = r2(horasCobradas * (f.milesPerHour ?? 0));
+  const millasExtra = Math.max(0, Math.floor(Math.floor(Math.max(0, millas)) - incluidas));
+  const cargoMillas = r2(millasExtra * (f.extraMileFee ?? 0));
+
+  const exceso = Math.max(0, Math.ceil(minutosDeMas));
+  const bloquesExtra = exceso <= cortesia ? 0 : Math.ceil(exceso / incremento);
+  const cargoTiempo = r2(bloquesExtra * r2(f.perHour * incremento / 60));
+
+  const extra = r2(cargoMillas + cargoTiempo);
+  return { bloque, alReservar, incluidas, millasExtra, cargoMillas, bloquesExtra, cargoTiempo, extra, total: r2(alReservar + extra) };
 }

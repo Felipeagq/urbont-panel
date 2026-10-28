@@ -8,9 +8,10 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import SurgeCard from './SurgeCard';
+import HourlyFares from './HourlyFares';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  estimarPorDistancia, estimarPorHora,
+  estimarPorDistancia,
   TIER1_MAX_MILES, TIER2_MAX_MILES,
   type FareConfig, type PricingPolicy,
 } from '@/lib/fares';
@@ -49,12 +50,6 @@ const WAIT_FIELDS: FieldMeta[] = [
   { key: 'waitPerMin', label: 'Espera por minuto', prefix: '$', desc: 'Tras los minutos gratis, con tope' },
 ];
 
-/** Chofer a disposición — se cobra por bloque de horas, no por distancia. */
-const HOURLY_FIELDS: FieldMeta[] = [
-  { key: 'perHour',  label: 'Por hora',       prefix: '$', desc: 'Precio de cada hora reservada' },
-  { key: 'minHours', label: 'Horas mínimas',  suffix: 'h', desc: 'Se cobran aunque se pidan menos' },
-];
-
 /** Cargos fijos — el recargo por demanda nunca los multiplica. */
 const FEE_FIELDS: FieldMeta[] = [
   { key: 'serviceFee', label: 'Reserva', prefix: '$', desc: 'Solo viajes programados; sin recargo' },
@@ -65,13 +60,12 @@ const FEE_FIELDS: FieldMeta[] = [
  *
  * Antes cada grupo ocupaba su propia fila de cuatro columnas, así que los de un
  * solo campo —espera y cargos fijos— dejaban tres huecos vacíos cada uno. Ahora
- * la distancia, que son cinco campos, llena una fila entera, y los tres cortos
- * comparten la siguiente.
+ * la distancia, que son cinco campos, llena una fila entera, y los cortos
+ * comparten la siguiente. La tarifa por hora tiene su propia pestaña.
  */
 const GRUPO_DISTANCIA = { title: 'Tarifa por distancia', fields: DISTANCE_FIELDS };
 const GRUPOS_CORTOS: Array<{ title: string; fields: FieldMeta[] }> = [
   { title: 'Espera',          fields: WAIT_FIELDS },
-  { title: 'Tarifa por hora', fields: HOURLY_FIELDS },
   { title: 'Cargos fijos',    fields: FEE_FIELDS },
 ];
 
@@ -102,6 +96,8 @@ export default function Fares() {
   const [activeClass, setActiveClass] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [programado, setProgramado] = useState(false);
+  /** Qué tarifas se editan: las del viaje por distancia o las de la reserva por hora. */
+  const [modo, setModo] = useState<'distancia' | 'hora'>('distancia');
   // Tasa de respaldo del impuesto: la que se usa cuando Stripe Tax no responde
   // o no cubre el país. La tasa real de cada viaje la calcula Stripe.
   const [taxRate, setTaxRate] = useState<number | null>(null);
@@ -160,6 +156,10 @@ export default function Fares() {
       ...prev,
       [vClass]: { ...prev[vClass], [field]: isNaN(num) ? 0 : num },
     }) : prev);
+  };
+
+  const handleToggleHourly = (vClass: string, enabled: boolean) => {
+    setFares(prev => prev ? ({ ...prev, [vClass]: { ...prev[vClass], hourlyEnabled: enabled } }) : prev);
   };
 
   const hasDirtyField = (vClass: string, field: string) => {
@@ -297,6 +297,21 @@ export default function Fares() {
           entiende si el multiplicador vigente se ve antes. */}
       <SurgeCard />
 
+      {/* Distancia o reserva por hora */}
+      <div className="flex gap-2 border-b border-gray-100">
+        {([['distancia', 'Por distancia'], ['hora', 'Reserva por hora']] as const).map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setModo(id)}
+            className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              modo === id ? 'border-(--brand) text-(--brand)' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* Vehicle class tabs */}
       <div className="flex gap-2 flex-wrap">
         {classes.map(vc => {
@@ -346,6 +361,15 @@ export default function Fares() {
             )}
           </div>
 
+          {modo === 'hora' ? (
+            <HourlyFares
+              fare={currentFare}
+              policy={policy}
+              isDirty={field => hasDirtyField(currentClass, field)}
+              onChange={(field, value) => handleChange(currentClass, field, value)}
+              onToggle={enabled => handleToggleHourly(currentClass, enabled)}
+            />
+          ) : (<>
           <div className="p-5 flex flex-col gap-6">
             {(() => {
               const campo = (fm: FieldMeta) => {
@@ -397,7 +421,7 @@ export default function Fares() {
                     </div>
                   </div>
 
-                  {/* Los tres grupos cortos, uno al lado del otro */}
+                  {/* Los grupos cortos, uno al lado del otro */}
                   <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
                     {GRUPOS_CORTOS.map(group => (
                       <div key={group.title} className={group.fields.length > 1 ? 'xl:col-span-2' : ''}>
@@ -441,7 +465,7 @@ export default function Fares() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-center">
               {ESCENARIOS.map(s => (
                 <div key={s.label} className="bg-white rounded-lg p-3 border border-gray-100">
                   <p className="text-[10px] text-gray-400 mb-1">{s.label}</p>
@@ -450,14 +474,6 @@ export default function Fares() {
                   </p>
                 </div>
               ))}
-              <div className="bg-white rounded-lg p-3 border border-gray-100">
-                <p className="text-[10px] text-gray-400 mb-1">
-                  Por hora · {currentFare.minHours} h mínimo
-                </p>
-                <p className="text-lg font-bold text-gray-900 tabular-nums">
-                  ${estimarPorHora(currentFare, currentFare.minHours, programado).toFixed(2)}
-                </p>
-              </div>
             </div>
 
             <div className="mt-3 bg-white rounded-lg px-3 py-2 border border-gray-100 text-xs text-gray-600 flex items-center justify-between gap-3 flex-wrap">
@@ -475,6 +491,7 @@ export default function Fares() {
               tiempo, pero nunca la reserva. Un viaje más largo nunca cuesta menos que uno más corto.
             </p>
           </div>
+          </>)}
         </div>
       )}
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { estimarPorDistancia, estimarPorHora, importeDistancia, tramoPorMilla, type FareConfig } from './fares';
+import { estimarPorDistancia, estimarReservaPorHora, importeDistancia, tramoPorMilla, type FareConfig } from './fares';
 
 /**
  * Los mismos casos que `urbont-api/server/config/pricing.test.ts`. Si alguno
@@ -55,16 +55,30 @@ describe('tramos', () => {
   });
 });
 
-describe('estimarPorHora', () => {
-  it('sin reserva si no es programado', () => {
-    expect(estimarPorHora(sedan, 4)).toBe(484);
+describe('estimarReservaPorHora — mismos casos que hourlyBooking.test.ts', () => {
+  // El ejemplo del cliente: $30/h, 25 mi por hora, $2 la milla extra.
+  const porHora: FareConfig = { ...sedan, perHour: 30, milesPerHour: 25, extraMileFee: 2, minHours: 2, maxHours: 12 };
+
+  it('3 h y 82 mi: 7 millas extra, $14', () => {
+    const e = estimarReservaPorHora(porHora, 3, 82, 0);
+    expect(e).toMatchObject({ bloque: 90, incluidas: 75, millasExtra: 7, cargoMillas: 14, cargoTiempo: 0, extra: 14 });
   });
 
-  it('con reserva si es programado', () => {
-    expect(estimarPorHora(sedan, 4, true)).toBe(495);
+  it('al reservar se paga el bloque, la reserva de la clase y el booking fee', () => {
+    expect(estimarReservaPorHora(porHora, 3, 0, 0).alReservar).toBe(102.5);
+  });
+
+  it('las millas se cobran completas y hacia abajo', () => {
+    expect(estimarReservaPorHora(porHora, 3, 82.9, 0).millasExtra).toBe(7);
+  });
+
+  it('5 min de cortesía; desde el 6 cada bloque de 15 empezado', () => {
+    expect(estimarReservaPorHora(porHora, 3, 0, 5).cargoTiempo).toBe(0);
+    expect(estimarReservaPorHora(porHora, 3, 0, 6).cargoTiempo).toBe(7.5);
+    expect(estimarReservaPorHora(porHora, 3, 0, 16).bloquesExtra).toBe(2);
   });
 
   it('nunca menos que el mínimo de horas', () => {
-    expect(estimarPorHora(sedan, 1)).toBe(estimarPorHora(sedan, 2));
+    expect(estimarReservaPorHora(porHora, 1, 0, 0).bloque).toBe(60);
   });
 });
