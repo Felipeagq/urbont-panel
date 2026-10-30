@@ -71,6 +71,12 @@ interface Driver {
 
   // Fuentes para auditoría
   verificationStatus?: string;
+  /** El alta va en dos fases: la 2 se le abre al aprobarle la 1. */
+  docsPhase?: 1 | 2;
+  docsPhaseUnlocked?: boolean;
+  docsPhase1Missing?: string[];
+  docsPhase1Pending?: string[];
+  docsPhase2Locked?: string[];
   backgroundCheckStatus?: string;
   documentStatus?: string;
   tier?: string;
@@ -370,6 +376,20 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
                     ({driver.documentsApproved}/{driver.documentsTotal})
                   </span>
                 </div>
+                {/* En qué tanda del alta está. Solo se enseña cuando hay fase 2
+                    configurada: sin ella, el alta es de una sola tanda. */}
+                {driver.docsPhaseUnlocked === false && (
+                  <div className="ml-7 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                    <p className="text-xs font-semibold text-amber-800">Fase 1 de 2</p>
+                    <p className="text-[11px] text-amber-700 mt-0.5 leading-snug">
+                      {driver.docsPhase1Missing?.length
+                        ? `Le faltan ${driver.docsPhase1Missing.length} documento(s) de la primera fase.`
+                        : 'Entregó la primera fase y espera revisión.'}
+                      {' '}Al aprobarle todos los de la fase 1 se le abren los {driver.docsPhase2Locked?.length ?? 0} restantes
+                      y se le avisa por correo y notificación.
+                    </p>
+                  </div>
+                )}
                 {driver.documentStatus && (
                   <p className="text-xs text-gray-500 ml-7">{driver.documentStatus}</p>
                 )}

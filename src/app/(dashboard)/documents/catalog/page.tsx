@@ -34,11 +34,19 @@ interface Documento {
   expires: boolean;
   active: boolean;
   sortOrder: number;
+  /** 1 = se le pide al registrarse. 2 = solo cuando se le apruebe la fase 1. */
+  phase: 1 | 2;
 }
 
-type Borrador = Pick<Documento, 'key' | 'label' | 'category' | 'hint' | 'expires'>;
+type Borrador = Pick<Documento, 'key' | 'label' | 'category' | 'hint' | 'expires' | 'phase'>;
 
-const vacio = (a: Audiencia): Borrador => ({ key: '', label: '', category: AUDIENCIAS[a].categoria, hint: '', expires: false });
+const vacio = (a: Audiencia): Borrador => ({ key: '', label: '', category: AUDIENCIAS[a].categoria, hint: '', expires: false, phase: 1 });
+
+/** El conductor sube la fase 1; la 2 se le abre cuando se le aprueba la primera. */
+const FASES = [
+  { n: 1 as const, titulo: 'Fase 1 · al registrarse', ayuda: 'Los primeros documentos. Mientras no se le aprueben, no puede subir los demás.' },
+  { n: 2 as const, titulo: 'Fase 2 · tras aprobar la fase 1', ayuda: 'Se le piden cuando un administrador aprueba todos los de la fase 1.' },
+];
 
 export default function CatalogoDocumentos() {
   const [docs, setDocs] = useState<Documento[]>([]);
@@ -100,11 +108,16 @@ export default function CatalogoDocumentos() {
 
   const activos = docs.filter(d => d.active).length;
 
-  const porCategoria = useMemo(() => {
+  /** Por fase y, dentro de cada una, por categoría. */
+  const porFase = useMemo(() => FASES.map(f => {
     const grupos = new Map<string, Documento[]>();
-    for (const d of docs) grupos.set(d.category, [...(grupos.get(d.category) ?? []), d]);
-    return [...grupos.entries()];
-  }, [docs]);
+    for (const d of docs.filter(x => (x.phase ?? 1) === f.n)) {
+      grupos.set(d.category, [...(grupos.get(d.category) ?? []), d]);
+    }
+    return { ...f, categorias: [...grupos.entries()], activos: docs.filter(x => (x.phase ?? 1) === f.n && x.active).length };
+  }), [docs]);
+
+  const hayFase2 = docs.some(d => (d.phase ?? 1) === 2 && d.active);
 
   const opcionesCategoria = [...new Set([...categorias, ...docs.map(d => d.category)])];
 
@@ -163,6 +176,15 @@ export default function CatalogoDocumentos() {
         impedir el paso a revisión; lo que ya esté subido se conserva y se sigue viendo en Verificación.
       </div>
 
+      {audiencia === 'driver' && (
+        <div className="bg-white border border-gray-100 rounded-xl px-4 py-3 text-xs text-gray-600 shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
+          <b className="text-gray-900">El alta va en dos fases.</b>{' '}
+          {hayFase2
+            ? 'El conductor sube los de la fase 1 y no puede subir los de la fase 2 hasta que un administrador le apruebe todos los primeros. Al aprobarlos se le avisa por correo y por notificación.'
+            : 'Hoy no hay ningún documento en la fase 2, así que se le piden todos de una vez. Mueve un documento a la fase 2 para que solo se le pida después de aprobarle los primeros.'}
+        </div>
+      )}
+
       {/* Alta */}
       {creando && (
         <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
@@ -207,6 +229,19 @@ export default function CatalogoDocumentos() {
                 onChange={e => setBorrador({ ...borrador, hint: e.target.value })}
               />
             </label>
+            {audiencia === 'driver' && (
+              <label className="text-xs text-gray-500 space-y-1">
+                <span>Cuándo se le pide</span>
+                <select
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-(--brand)/30"
+                  value={borrador.phase}
+                  onChange={e => setBorrador({ ...borrador, phase: Number(e.target.value) as 1 | 2 })}
+                >
+                  <option value={1}>Fase 1 · al registrarse</option>
+                  <option value={2}>Fase 2 · tras aprobar la fase 1</option>
+                </select>
+              </label>
+            )}
           </div>
           <div className="flex items-center justify-between">
             <label className="flex items-center gap-2 text-xs text-gray-600">
@@ -245,8 +280,26 @@ export default function CatalogoDocumentos() {
           <p className="text-sm text-gray-400">El catálogo está vacío</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {porCategoria.map(([categoria, items]) => (
+        <div className="space-y-7">
+          {porFase.map(fase => (
+          <div key={fase.n} className="space-y-4">
+            <div className="flex items-baseline justify-between gap-3 flex-wrap">
+              <div>
+                <h2 className="text-sm font-bold text-gray-900">{fase.titulo}</h2>
+                <p className="text-xs text-gray-400 mt-0.5">{fase.ayuda}</p>
+              </div>
+              <p className="text-[11px] text-gray-400 shrink-0">{fase.activos} activos</p>
+            </div>
+
+            {fase.categorias.length === 0 ? (
+              <div className="bg-white rounded-xl border border-dashed border-gray-200 px-5 py-6 text-center">
+                <p className="text-xs text-gray-400">
+                  {fase.n === 2
+                    ? 'Sin documentos en la fase 2: hoy se le piden todos de una vez, como hasta ahora.'
+                    : 'Sin documentos en esta fase.'}
+                </p>
+              </div>
+            ) : fase.categorias.map(([categoria, items]) => (
             <div key={categoria} className="bg-white rounded-xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden">
               <div className="px-5 py-2.5 bg-gray-50/70 border-b border-gray-100 flex items-center justify-between">
                 <p className="text-xs font-semibold text-gray-600">{categoria}</p>
@@ -315,6 +368,21 @@ export default function CatalogoDocumentos() {
                             {!doc.active && (
                               <span className="badge-sm bg-gray-100 text-gray-500 border border-gray-200">No se pide</span>
                             )}
+                            {audiencia === 'driver' && (
+                              <select
+                                value={doc.phase ?? 1}
+                                disabled={guardando === doc.key}
+                                onChange={e => {
+                                  const fase = Number(e.target.value) as 1 | 2;
+                                  guardar(doc.key, { phase: fase }, `«${doc.label}» pasa a la fase ${fase}`);
+                                }}
+                                aria-label={`Fase de ${doc.label}`}
+                                className="text-[11px] border border-gray-200 rounded-md px-1.5 py-0.5 bg-white text-gray-600 disabled:opacity-50"
+                              >
+                                <option value={1}>Fase 1</option>
+                                <option value={2}>Fase 2</option>
+                              </select>
+                            )}
                           </div>
                           {doc.hint && <p className="text-xs text-gray-400 mt-0.5">{doc.hint}</p>}
                         </div>
@@ -354,6 +422,8 @@ export default function CatalogoDocumentos() {
                 ))}
               </div>
             </div>
+            ))}
+          </div>
           ))}
         </div>
       )}
