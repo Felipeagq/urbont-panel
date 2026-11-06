@@ -57,6 +57,60 @@ interface Ride {
   /** 'paid' | 'refunded' | 'failed' | 'pending'. El estado del cobro, aparte del operativo. */
   paymentStatus?: string | null;
   driverCancelReason?: string | null;
+  booking_type?: string | null;
+  scheduled_at?: string | null;
+  notes?: string | null;
+  stops?: unknown;
+  child_seats?: unknown;
+  guest_name?: string | null;
+  ride_preferences?: unknown;
+  accessibility?: boolean | null;
+  dispatched_by_valet?: boolean | null;
+  valet_booking_ref?: string | null;
+}
+
+const TIPO_RESERVA: Record<string, string> = {
+  now: 'Ahora',
+  scheduled: 'Programado',
+  hourly: 'Por hora',
+};
+
+const CABINA: Record<string, string> = {
+  Cool: 'Fría', Neutral: 'Neutra', Warm: 'Cálida',
+  Jazz: 'Jazz', Classical: 'Clásica', Pop: 'Pop', Silence: 'Silencio',
+  Chatty: 'Con conversación', Active: 'Activa', Minimal: 'Mínima', Quiet: 'En silencio', Silent: 'En silencio',
+};
+
+function direccionesDeParadas(stops: unknown): string[] {
+  if (!Array.isArray(stops)) return [];
+  return stops.map(s => {
+    if (typeof s === 'string') return s;
+    if (s && typeof s === 'object' && 'address' in s) return String((s as { address?: unknown }).address || '');
+    return '';
+  }).filter(Boolean);
+}
+
+function textoSillas(raw: unknown): string | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const partes = [
+    ['rear_facing', 'a contramarcha'],
+    ['forward_facing', 'en el sentido de la marcha'],
+    ['booster', 'elevador'],
+  ].flatMap(([clave, etiqueta]) => {
+    const n = Number(o[clave] ?? 0);
+    return n > 0 ? [`${n} ${etiqueta}`] : [];
+  });
+  return partes.length ? partes.join(' · ') : null;
+}
+
+function textoCabina(raw: unknown): string | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const partes = [o.temp, o.music, o.conversation]
+    .filter((v): v is string => typeof v === 'string' && v.length > 0)
+    .map(v => CABINA[v] ?? v);
+  return partes.length ? partes.join(' · ') : null;
 }
 
 // El estado del cobro va aparte del operativo: un viaje reembolsado sigue
@@ -104,6 +158,32 @@ const VEHICLE_LABELS: Record<string, string> = {
   concierge: 'Concierge',
   valet: 'Valet',
 };
+
+function ReservaDelViaje({ ride }: { ride: Ride }) {
+  const sillas = textoSillas(ride.child_seats);
+  const cabina = textoCabina(ride.ride_preferences);
+  const tipo = ride.booking_type ? (TIPO_RESERVA[ride.booking_type] ?? ride.booking_type) : null;
+  const filas: Array<[string, string]> = [];
+  if (tipo && tipo !== 'Ahora') filas.push(['Tipo', tipo]);
+  if (ride.scheduled_at) filas.push(['Hora en Miami', formatDate(ride.scheduled_at)]);
+  if (ride.dispatched_by_valet || ride.guest_name) filas.push(['Huésped', ride.guest_name || 'Sin nombre']);
+  if (ride.valet_booking_ref) filas.push(['Reserva valet', ride.valet_booking_ref]);
+  if (sillas) filas.push(['Sillas', sillas]);
+  if (cabina) filas.push(['Cabina', cabina]);
+  if (ride.accessibility) filas.push(['Accesibilidad', 'La pidió']);
+  if (ride.notes) filas.push(['Nota', ride.notes]);
+  if (filas.length === 0) return null;
+  return (
+    <div className="mt-4 space-y-1.5">
+      {filas.map(([etiqueta, valor]) => (
+        <div key={etiqueta} className="flex gap-2 text-xs">
+          <span className="w-24 shrink-0 text-gray-400">{etiqueta}</span>
+          <span className="text-gray-700">{valor}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 const FILTERS = [
   { key: 'all', label: 'Todos' },
@@ -355,12 +435,22 @@ export default function Rides() {
                         <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 mt-0.5" />
                         <span className="text-gray-600 leading-relaxed">{detailRide.pickupAddress || '—'}</span>
                       </div>
+                      {direccionesDeParadas(detailRide.stops).map((parada, i) => (
+                        <div key={`${parada}-${i}`}>
+                          <div className="ml-2 w-px h-3 bg-gray-200" />
+                          <div className="flex items-start gap-1.5 text-xs">
+                            <div className="w-2 h-2 rounded-full bg-amber-400 shrink-0 mt-0.5" />
+                            <span className="text-gray-600 leading-relaxed">{parada}</span>
+                          </div>
+                        </div>
+                      ))}
                       <div className="ml-2 w-px h-3 bg-gray-200" />
                       <div className="flex items-start gap-1.5 text-xs">
                         <div className="w-2 h-2 rounded-full bg-red-400 shrink-0 mt-0.5" />
                         <span className="text-gray-600 leading-relaxed">{detailRide.dropoffAddress || '—'}</span>
                       </div>
                     </div>
+                    <ReservaDelViaje ride={detailRide} />
                   </div>
 
                   {/* Money breakdown */}

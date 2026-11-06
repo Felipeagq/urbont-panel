@@ -22,6 +22,8 @@ interface CatalogEntry {
   audience: 'passenger' | 'driver' | 'chat';
   title: string;
   body: string;
+  titleEs?: string | null;
+  bodyEs?: string | null;
   type: string | null;
   screen: string | null;
   trigger: string;
@@ -76,6 +78,8 @@ export default function NotificationsPage() {
   const [loadingStats, setLoadingStats] = useState(true);
 
   const [title, setTitle] = useState('');
+  const [titleEs, setTitleEs] = useState('');
+  const [bodyEs, setBodyEs] = useState('');
   const [body, setBody] = useState('');
   const [imageUrl, setImageUrl] = useState('');
 
@@ -177,7 +181,8 @@ export default function NotificationsPage() {
   }
 
   const targetsNobody = mode === 'users' && selected.length === 0;
-  const canSend = title.trim() && body.trim() && !sending && !targetsNobody;
+  const espanolAMedias = Boolean(titleEs.trim()) !== Boolean(bodyEs.trim());
+  const canSend = title.trim() && body.trim() && !espanolAMedias && !sending && !targetsNobody;
 
   // Un envío a "Todos" no se puede deshacer ni retirar del teléfono: pide
   // confirmación explícita antes de salir.
@@ -192,6 +197,9 @@ export default function NotificationsPage() {
         title: title.trim(),
         body: body.trim(),
         platform,
+        ...(titleEs.trim() && bodyEs.trim()
+          ? { titleEs: titleEs.trim(), bodyEs: bodyEs.trim() }
+          : {}),
         ...(imageUrl.trim() ? { imageUrl: imageUrl.trim() } : {}),
       };
       if (mode === 'users') payload.user_ids = selected.map(p => p.id);
@@ -308,6 +316,34 @@ export default function NotificationsPage() {
             </label>
 
             <label className="block">
+              <span className="text-xs font-medium text-gray-600">Título en español</span>
+              <input
+                value={titleEs}
+                onChange={e => setTitleEs(e.target.value)}
+                maxLength={100}
+                placeholder="Tu viaje te espera"
+                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400"
+              />
+              <span className="mt-0.5 block text-right text-xs text-gray-400">{titleEs.length}/100</span>
+            </label>
+
+            <label className="block">
+              <span className="text-xs font-medium text-gray-600">Cuerpo en español</span>
+              <textarea
+                value={bodyEs}
+                onChange={e => setBodyEs(e.target.value)}
+                maxLength={500}
+                rows={4}
+                placeholder="Reserva ahora y ahorra un 20% en tu próximo trayecto."
+                className="mt-1 w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400"
+              />
+              <span className="mt-0.5 block text-right text-xs text-gray-400">{bodyEs.length}/500</span>
+            </label>
+            {espanolAMedias && (
+              <p className="text-xs text-amber-700">El español necesita título y cuerpo juntos. Si no van los dos, el envío se queda bloqueado.</p>
+            )}
+
+            <label className="block">
               <span className="text-xs font-medium text-gray-600">Imagen (opcional)</span>
               <input
                 value={imageUrl}
@@ -321,9 +357,19 @@ export default function NotificationsPage() {
           {/* Vista previa */}
           <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
             <h2 className="mb-3 text-sm font-semibold text-gray-900">Vista previa</h2>
-            <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
-              <p className="text-sm font-semibold text-gray-900">{title || 'Título'}</p>
-              <p className="mt-0.5 text-sm text-gray-600">{body || 'Cuerpo del mensaje'}</p>
+            <div className="space-y-2">
+              <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Inglés</p>
+                <p className="text-sm font-semibold text-gray-900">{title || 'Título'}</p>
+                <p className="mt-0.5 text-sm text-gray-600">{body || 'Cuerpo del mensaje'}</p>
+              </div>
+              {(titleEs.trim() || bodyEs.trim()) && (
+                <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Español</p>
+                  <p className="text-sm font-semibold text-gray-900">{titleEs || 'Título'}</p>
+                  <p className="mt-0.5 text-sm text-gray-600">{bodyEs || 'Cuerpo del mensaje'}</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -673,6 +719,13 @@ export default function NotificationsPage() {
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-gray-900">{c.title}</p>
                         <p className="mt-0.5 text-sm text-gray-600">{c.body}</p>
+                        {c.titleEs && (
+                          <p className="mt-2 text-sm text-gray-800">
+                            <span className="mr-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">ES</span>
+                            {c.titleEs}
+                          </p>
+                        )}
+                        {c.bodyEs && <p className="mt-0.5 text-sm text-gray-600">{c.bodyEs}</p>}
                       </div>
                       <span
                         className={`flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs ${
