@@ -11,7 +11,7 @@ import type { NextRequest } from 'next/server';
 
 const BACKEND = (process.env.BACKEND_API_URL ?? 'http://localhost:5001').replace(/\/$/, '');
 
-const ALLOWED_ROLES = ['owner', 'analyst'] as const;
+const ALLOWED_ROLES = ['owner', 'analyst', 'finance'] as const;
 
 /**
  * Caché de validación por token. Sin esto se paga un viaje al backend en cada
@@ -133,7 +133,7 @@ export async function requireFinancieroAccess(req: NextRequest): Promise<AuthRes
     return {
       ok: false,
       response: Response.json(
-        { error: 'Este módulo requiere rol owner o analyst' },
+        { error: 'Este módulo requiere rol owner, analyst o finance' },
         { status: 403 },
       ),
     };

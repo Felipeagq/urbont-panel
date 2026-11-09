@@ -1,6 +1,6 @@
 'use client';
 
-export type AdminRole = 'owner' | 'developer' | 'support' | 'operations' | 'analyst';
+export type AdminRole = 'owner' | 'developer' | 'support' | 'operations' | 'analyst' | 'finance';
 
 export interface AdminUser {
   id: string;

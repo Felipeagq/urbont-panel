@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Car, Users, FileText, DollarSign,
   MapPin, TrendingUp, AlertTriangle, MessageSquareWarning,
   Headphones, Star, Settings, Shield, FlaskConical, LogOut, Menu, X, ChevronRight, CreditCard,
-  Globe2, Bell, ConciergeBell, Camera, Scale
+  Globe2, Bell, ConciergeBell, Camera, Scale, Wallet
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import type { AdminRole } from '@/lib/api';
@@ -37,13 +37,14 @@ const NAV_ITEMS: NavItem[] = [
   { name: 'penalties',   label: 'Penalidades',      href: '/penalties',  icon: Scale,                roles: ['owner','support','operations'],                       group: 'ops' },
   { name: 'fares',       label: 'Tarifas',          href: '/fares',      icon: DollarSign,           roles: ['owner','developer','operations'],                     group: 'ops' },
   { name: 'zones',       label: 'Zonas',            href: '/zones',      icon: Globe2,               roles: ['owner','developer','operations'],                     group: 'ops' },
-  { name: 'revenue',     label: 'Ingresos',         href: '/revenue',    icon: TrendingUp,           roles: ['owner','operations','analyst'],                       group: 'ops' },
+  { name: 'revenue',     label: 'Ingresos',         href: '/revenue',    icon: TrendingUp,           roles: ['owner','operations','analyst','finance'],             group: 'ops' },
+  { name: 'pagos',       label: 'Pagos',            href: '/pagos',      icon: Wallet,               roles: ['owner','finance'],                                    group: 'ops' },
   { name: 'incidents',   label: 'Incidentes',       href: '/incidents',  icon: AlertTriangle,        roles: ['owner','support','operations'],                       group: 'ops' },
   { name: 'complaints',  label: 'Quejas',           href: '/complaints', icon: MessageSquareWarning, roles: ['owner','support','operations'],                       group: 'ops' },
   { name: 'support',     label: 'Soporte',          href: '/support',    icon: Headphones,           roles: ['owner','support'],                                    group: 'ops' },
   { name: 'feedback',    label: 'Feedback',         href: '/feedback',   icon: Star,                 roles: ['owner','support','analyst'],                          group: 'ops' },
   { name: 'notifications', label: 'Notificaciones',   href: '/notifications', icon: Bell,            roles: ['owner','operations'],                                 group: 'ops' },
-  { name: 'financiero',  label: 'Financiero',       href: '/financiero', icon: CreditCard,           roles: ['owner','analyst'],                                    group: 'admin' },
+  { name: 'financiero',  label: 'Financiero',       href: '/financiero', icon: CreditCard,           roles: ['owner','analyst','finance'],                          group: 'admin' },
   { name: 'system',      label: 'Sistema',          href: '/system',     icon: Settings,             roles: ['owner','developer'],                                  group: 'admin' },
   { name: 'users',       label: 'Admin Users',      href: '/users',      icon: Shield,               roles: ['owner'],                                              group: 'admin' },
   { name: 'test-accounts', label: 'Cuentas de prueba', href: '/test-accounts', icon: FlaskConical,     roles: ['owner'],                                              group: 'admin' },
@@ -55,6 +56,7 @@ const ROLE_META: Record<AdminRole, { label: string; color: string }> = {
   support:    { label: 'Support',    color: 'bg-emerald-500/20 text-emerald-200 border-emerald-400/30' },
   operations: { label: 'Operations', color: 'bg-orange-500/20 text-orange-200 border-orange-400/30' },
   analyst:    { label: 'Analyst',    color: 'bg-slate-500/20 text-slate-300 border-slate-400/30' },
+  finance:    { label: 'Finanzas',   color: 'bg-teal-500/20 text-teal-200 border-teal-400/30' },
 };
 
 const GROUP_LABELS: Record<string, string> = {

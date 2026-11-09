@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { adminFetch } from '@/lib/api';
+import { adminFetch, type AdminRole } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
 import {
@@ -16,18 +16,24 @@ interface AdminUser {
   id: string;
   email: string;
   name: string;
-  role: 'owner' | 'developer' | 'support' | 'operations' | 'analyst';
+  role: AdminRole;
   active: boolean;
   createdAt: string;
   lastLogin?: string;
 }
 
-const ROLE_CONFIG: Record<string, { label: string; class: string; desc: string }> = {
+/**
+ * Tipado contra `AdminRole` a propósito: de aquí salen los selectores de rol y
+ * los contadores, así que un rol nuevo que falte en esta tabla no aparecería en
+ * el panel y nadie se enteraría. Con el `Record` completo, el compilador avisa.
+ */
+const ROLE_CONFIG: Record<AdminRole, { label: string; class: string; desc: string }> = {
   owner:      { label: 'Owner',      class: 'bg-purple-100 text-purple-700 border-purple-200', desc: 'Acceso total al panel' },
   developer:  { label: 'Developer',  class: 'bg-blue-100 text-blue-700 border-blue-200',       desc: 'Acceso técnico y sistema' },
   support:    { label: 'Soporte',    class: 'bg-emerald-100 text-emerald-700 border-emerald-200', desc: 'Tickets y quejas' },
   operations: { label: 'Operaciones', class: 'bg-orange-100 text-orange-700 border-orange-200',  desc: 'Conductores y viajes' },
   analyst:    { label: 'Analista',   class: 'bg-slate-100 text-slate-700 border-slate-200',    desc: 'Reportes y revenue' },
+  finance:    { label: 'Finanzas',   class: 'bg-teal-100 text-teal-700 border-teal-200',       desc: 'Cobros, reparto y gastos' },
 };
 
 const AVATAR_PALETTE = [
@@ -46,7 +52,7 @@ function getInitials(name: string) {
 interface InviteForm {
   name: string;
   email: string;
-  role: string;
+  role: AdminRole;
   password: string;
 }
 
@@ -633,7 +639,7 @@ export default function AdminUsers() {
                 <select
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--brand)/30 focus:border-(--brand) bg-white"
                   value={inviteForm.role}
-                  onChange={e => setInviteForm(f => ({ ...f, role: e.target.value }))}
+                  onChange={e => setInviteForm(f => ({ ...f, role: e.target.value as AdminRole }))}
                 >
                   {Object.entries(ROLE_CONFIG).map(([r, cfg]) => (
                     <option key={r} value={r}>{cfg.label}</option>
