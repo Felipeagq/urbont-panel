@@ -23,6 +23,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { formatDate } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertTriangle, Check, Info, Lock, RefreshCw } from 'lucide-react';
+import Credenciales from './Credenciales';
 
 interface Interruptor {
   flows: string[];
@@ -251,6 +252,9 @@ export default function Configuracion() {
           </p>
         )}
       </section>
+
+      {/* ── Las credenciales ─────────────────────────────────────────────── */}
+      <Credenciales />
 
       {/* ── El procesador ────────────────────────────────────────────────── */}
       <section className="space-y-3">

@@ -22,6 +22,7 @@ import {
   Clock, RefreshCw, Scale, Wallet,
 } from 'lucide-react';
 import Configuracion from './Configuracion';
+import Webhooks from './Webhooks';
 
 // ── Tipos de lo que devuelve el backend ─────────────────────────────────────
 
@@ -151,7 +152,7 @@ function Tarjeta({
 
 export default function Pagos() {
   const [rango, setRango] = useState<(typeof RANGOS)[number]['id']>('30d');
-  const [tab, setTab] = useState<'cobros' | 'porPagar' | 'conciliacion' | 'config'>('cobros');
+  const [tab, setTab] = useState<'cobros' | 'porPagar' | 'webhooks' | 'conciliacion' | 'config'>('cobros');
 
   const [resumen, setResumen] = useState<Resumen | null>(null);
   const [cobros, setCobros] = useState<Cobro[]>([]);
@@ -308,6 +309,7 @@ export default function Pagos() {
           {([
             ['cobros', `Cobros (${cobros.length})`],
             ['porPagar', `Por pagar (${pendientes.length})`],
+            ['webhooks', 'Webhooks'],
             ['conciliacion', 'Conciliación'],
             ['config', 'Configuración'],
           ] as const).map(([id, label]) => (
@@ -369,6 +371,8 @@ export default function Pagos() {
             ])}
           />
         )}
+
+        {tab === 'webhooks' && <Webhooks />}
 
         {tab === 'config' && <Configuracion />}
 
