@@ -21,6 +21,7 @@ import {
   AlertTriangle, ArrowDownToLine, Car, ConciergeBell, Building2,
   Clock, RefreshCw, Scale, Wallet,
 } from 'lucide-react';
+import Configuracion from './Configuracion';
 
 // ── Tipos de lo que devuelve el backend ─────────────────────────────────────
 
@@ -150,7 +151,7 @@ function Tarjeta({
 
 export default function Pagos() {
   const [rango, setRango] = useState<(typeof RANGOS)[number]['id']>('30d');
-  const [tab, setTab] = useState<'cobros' | 'porPagar' | 'conciliacion'>('cobros');
+  const [tab, setTab] = useState<'cobros' | 'porPagar' | 'conciliacion' | 'config'>('cobros');
 
   const [resumen, setResumen] = useState<Resumen | null>(null);
   const [cobros, setCobros] = useState<Cobro[]>([]);
@@ -308,6 +309,7 @@ export default function Pagos() {
             ['cobros', `Cobros (${cobros.length})`],
             ['porPagar', `Por pagar (${pendientes.length})`],
             ['conciliacion', 'Conciliación'],
+            ['config', 'Configuración'],
           ] as const).map(([id, label]) => (
             <button
               key={id}
@@ -367,6 +369,8 @@ export default function Pagos() {
             ])}
           />
         )}
+
+        {tab === 'config' && <Configuracion />}
 
         {tab === 'conciliacion' && (
           cuadres.length === 0 ? (
