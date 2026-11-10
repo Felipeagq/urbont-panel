@@ -16,7 +16,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { adminFetch } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatDate } from '@/lib/utils';
-import { AlertTriangle, Check, KeyRound, Lock, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, Check, Copy, KeyRound, Lock, ShieldCheck } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface Campo {
   nombre: string;
@@ -24,6 +25,35 @@ interface Campo {
   requerido: boolean;
   secreto: boolean;
   ayuda?: string;
+}
+
+interface EnlaceWebhook {
+  id: string;
+  etiqueta: string;
+  url: string;
+  nota: string;
+}
+
+/**
+ * Si el micro todavía no manda los enlaces, se arman con la dirección de
+ * producción. Stripe tiene dos endpoints en su panel y los dos pegan la misma
+ * ruta: el adaptador prueba los dos secretos.
+ */
+function enlacesDe(p: { provider: string; webhooks?: EnlaceWebhook[] }): EnlaceWebhook[] {
+  if (p.webhooks?.length) return p.webhooks;
+  const url = `https://payments.urbont.com/webhooks/${p.provider}`;
+  if (p.provider === 'stripe') {
+    return [
+      { id: 'cuenta', etiqueta: 'Webhook de la cuenta', url, nota: 'Pégalo en el endpoint de la cuenta de Urbont. El secreto de ese endpoint es el de la cuenta.' },
+      { id: 'connect', etiqueta: 'Webhook de Connect', url, nota: 'Mismo enlace, otro endpoint en Stripe: el de las cuentas de los choferes, con su propio secreto.' },
+    ];
+  }
+  if (p.provider === 'square') {
+    return [
+      { id: 'entrega', etiqueta: 'Webhook', url, nota: 'Pégala tal cual en Square. La firma incluye esta URL: un carácter de diferencia hace que ningún aviso cuadre.' },
+    ];
+  }
+  return [{ id: 'aviso', etiqueta: 'Webhook', url, nota: 'Pégala en el panel de esa pasarela.' }];
 }
 
 interface Pasarela {
@@ -37,6 +67,7 @@ interface Pasarela {
   montado: boolean;
   origen: 'entorno' | 'panel' | 'ninguno';
   campos: Campo[];
+  webhooks?: EnlaceWebhook[];
 }
 
 interface Respuesta {
@@ -151,6 +182,28 @@ export default function Credenciales() {
                 </button>
               </div>
             </div>
+
+            {enlacesDe(p).map(w => (
+              <div key={w.id} className="flex items-start justify-between gap-3 border-t border-gray-100 bg-gray-50/50 px-4 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-medium text-gray-500">{w.etiqueta}</p>
+                  <p className="break-all font-mono text-[12px] text-gray-800">{w.url}</p>
+                  <p className="mt-0.5 text-[11px] text-gray-400">{w.nota}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(w.url).then(
+                      () => toast.success('Enlace copiado'),
+                      () => toast.error('No se pudo copiar'),
+                    );
+                  }}
+                  className="btn-outline inline-flex shrink-0 items-center gap-1 text-xs"
+                >
+                  <Copy className="h-3 w-3" /> Copiar
+                </button>
+              </div>
+            ))}
 
             {abierta === p.provider && (
               <div className="border-t border-gray-100 bg-gray-50/60 px-4 py-4 space-y-3">
