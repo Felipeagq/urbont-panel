@@ -16,7 +16,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { adminFetch } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatDate } from '@/lib/utils';
-import { AlertTriangle, Check, KeyRound, Lock, ShieldCheck } from 'lucide-react';
+import { toast } from 'sonner';
+import { AlertTriangle, Check, Copy, KeyRound, Link2, Lock, ShieldCheck } from 'lucide-react';
 
 interface Campo {
   nombre: string;
@@ -37,6 +38,13 @@ interface Pasarela {
   montado: boolean;
   origen: 'entorno' | 'panel' | 'ninguno';
   campos: Campo[];
+  /**
+   * Los enlaces que hay que pegar en el panel de ESA pasarela, tal como los
+   * publica el micro. Stripe trae dos —la cuenta y Connect—, que en su panel
+   * son dos endpoints distintos con secretos distintos aunque la URL sea la
+   * misma.
+   */
+  webhooks?: { id: string; etiqueta: string; url: string; nota: string }[];
 }
 
 interface Respuesta {
@@ -62,6 +70,13 @@ export default function Credenciales() {
   }, []);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  const copiar = (texto: string) => {
+    navigator.clipboard.writeText(texto).then(
+      () => toast.success('URL copiada'),
+      () => toast.error('No se pudo copiar'),
+    );
+  };
 
   const guardar = async (provider: string) => {
     setGuardando(true);
@@ -91,7 +106,8 @@ export default function Credenciales() {
         <p className="text-xs text-gray-400 mt-0.5">
           Se guardan cifradas y <strong>el panel no las vuelve a leer</strong>: solo verás los últimos
           cuatro caracteres. Antes de guardarlas se prueban contra el procesador, así no se puede
-          dejar el cobro muerto con una clave mal pegada.
+          dejar el cobro muerto con una clave mal pegada. Cada una trae además la URL de webhook que
+          hay que pegar en el panel de ese procesador.
         </p>
       </div>
 
@@ -151,6 +167,32 @@ export default function Credenciales() {
                 </button>
               </div>
             </div>
+
+            {/* Los enlaces del webhook: lo único de esta pantalla que se pega en
+                otro sitio, así que se ven siempre y no sólo al editar. */}
+            {(p.webhooks ?? []).length > 0 && (
+              <div className="border-t border-gray-100 bg-gray-50/60 divide-y divide-gray-100">
+                {p.webhooks!.map(w => (
+                  <div key={w.id} className="px-4 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <Link2 className="w-3.5 h-3.5 shrink-0 text-gray-400" />
+                      <span className="text-[11px] font-medium text-gray-500 shrink-0">{w.etiqueta}</span>
+                      <code className="flex-1 min-w-0 truncate font-mono text-[11.5px] text-gray-600">
+                        {w.url}
+                      </code>
+                      <button
+                        onClick={() => copiar(w.url)}
+                        className="btn-outline text-[11px] px-2 py-1 flex items-center gap-1 shrink-0"
+                        title="Copiar para pegarlo en el panel del procesador"
+                      >
+                        <Copy className="w-3 h-3" /> Copiar
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-gray-400 mt-1 ml-[22px]">{w.nota}</p>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {abierta === p.provider && (
               <div className="border-t border-gray-100 bg-gray-50/60 px-4 py-4 space-y-3">
