@@ -44,8 +44,7 @@ function enlacesDe(p: { provider: string; webhooks?: EnlaceWebhook[] }): EnlaceW
   const url = `https://payments.urbont.com/webhooks/${p.provider}`;
   if (p.provider === 'stripe') {
     return [
-      { id: 'cuenta', etiqueta: 'Webhook de la cuenta', url, nota: 'Pégalo en el endpoint de la cuenta de Urbont. El secreto de ese endpoint es el de la cuenta.' },
-      { id: 'connect', etiqueta: 'Webhook de Connect', url, nota: 'Mismo enlace, otro endpoint en Stripe: el de las cuentas de los choferes, con su propio secreto.' },
+      { id: 'stripe', etiqueta: 'Webhook', url, nota: 'En Stripe se pega DOS veces, en dos endpoints distintos: el de la cuenta de Urbont y el de Connect (las cuentas de los choferes). Cada uno trae su propio secreto, y los dos van arriba, en las credenciales.' },
     ];
   }
   if (p.provider === 'square') {
