@@ -67,6 +67,35 @@ interface DatosBancarios {
   zelleEmail?: string;
 }
 
+/**
+ * Sube el justificante y devuelve su ruta.
+ *
+ * El archivo no pasa por el backend: éste emite un permiso de subida firmado y
+ * el navegador escribe directo en el almacenamiento. Es el patrón que ya usan
+ * las fotos de limpieza y las inspecciones.
+ */
+async function subirComprobante(payeeId: string, archivo: File): Promise<string> {
+  const permiso = await adminFetch(`/api/admin/payouts/${payeeId}/receipt-url`, {
+    method: 'POST',
+    body: JSON.stringify({ mimeType: archivo.type }),
+  }) as { uploadUrl: string; path: string; maxBytes: number; headers: Record<string, string> };
+
+  if (archivo.size > permiso.maxBytes) {
+    throw new Error(`El comprobante no puede pasar de ${Math.round(permiso.maxBytes / 1024 / 1024)} MB.`);
+  }
+
+  // Esta petición NO lleva el token de admin: va al almacenamiento, no a la
+  // API, y la URL firmada es la que autoriza.
+  const res = await fetch(permiso.uploadUrl, {
+    method: 'PUT',
+    headers: permiso.headers,
+    body: archivo,
+  });
+  if (!res.ok) throw new Error('No se pudo subir el comprobante.');
+
+  return permiso.path;
+}
+
 const METODOS = [
   ['ach', 'Transferencia ACH'],
   ['zelle', 'Zelle'],
@@ -152,13 +181,24 @@ export default function PagosManuales() {
               key={s.payeeId}
               saldo={s}
               pagando={pagando === s.payeeId}
-              onPagar={async (method, reference, notes) => {
+              onPagar={async (method, reference, notes, comprobante) => {
                 setPagando(s.payeeId);
                 setError(null);
                 try {
+                  // El comprobante se sube ANTES de registrar el pago.
+                  //
+                  // Si se hiciera al revés y la subida fallara, quedaría un
+                  // pago dado por hecho sin justificante y sin forma de
+                  // añadirlo después. Al revés, lo peor que queda es un
+                  // archivo huérfano en el bucket.
+                  let documentPath: string | undefined;
+                  if (comprobante) {
+                    documentPath = await subirComprobante(s.payeeId, comprobante);
+                  }
+
                   await adminFetch(`/api/admin/payouts/${s.payeeId}/pay`, {
                     method: 'POST',
-                    body: JSON.stringify({ method, reference, notes }),
+                    body: JSON.stringify({ method, reference, notes, documentPath }),
                   });
                   await cargar();
                 } catch (e) {
@@ -204,12 +244,13 @@ function FilaDePersona({
 }: {
   saldo: Saldo;
   pagando: boolean;
-  onPagar: (method: string, reference: string, notes: string) => Promise<void>;
+  onPagar: (method: string, reference: string, notes: string, comprobante: File | null) => Promise<void>;
 }) {
   const [abierto, setAbierto] = useState(false);
   const [metodo, setMetodo] = useState<string>(saldo.cuenta?.method ?? 'ach');
   const [referencia, setReferencia] = useState('');
   const [notas, setNotas] = useState('');
+  const [comprobante, setComprobante] = useState<File | null>(null);
   const [datos, setDatos] = useState<DatosBancarios | null>(null);
   const [viendo, setViendo] = useState(false);
 
@@ -318,6 +359,23 @@ function FilaDePersona({
             </label>
           </div>
 
+          {/* El justificante del banco. Se le manda por correo como enlace
+              firmado que caduca, no como adjunto: lleva su número de cuenta. */}
+          <label className="block text-[12px] text-gray-500">
+            Comprobante de la transferencia (PDF o imagen)
+            <input
+              type="file"
+              accept="application/pdf,image/jpeg,image/png,image/webp"
+              onChange={(e) => setComprobante(e.target.files?.[0] ?? null)}
+              className="mt-1 block w-full text-[13px] text-gray-700 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-3 file:py-1.5 file:text-[13px] file:text-gray-700 hover:file:bg-gray-200"
+            />
+            {comprobante && (
+              <span className="mt-1 block text-[12px] text-gray-500">
+                Se le enviará por correo: <strong className="text-gray-700">{comprobante.name}</strong>
+              </span>
+            )}
+          </label>
+
           {/* El importe no se edita: sale del libro. Se enseña para que quien
               transfiere sepa cuánto poner en el banco. */}
           <div className="flex items-center gap-2 rounded-lg bg-white border border-gray-200 px-3 py-2 text-[13px]">
@@ -330,7 +388,7 @@ function FilaDePersona({
           <div className="flex items-center gap-3">
             <button
               disabled={pagando}
-              onClick={() => void onPagar(metodo, referencia, notas)}
+              onClick={() => void onPagar(metodo, referencia, notas, comprobante)}
               className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-[13px] font-medium text-white disabled:opacity-60"
             >
               {pagando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
