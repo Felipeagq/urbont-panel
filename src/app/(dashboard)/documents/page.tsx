@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { adminFetch } from '@/lib/api';
-import { formatDate, formatRelativeTime, formatUrbontId } from '@/lib/utils';
+import { formatDate, formatRelativeTime, idDePersona } from '@/lib/utils';
 import {
   FileText, CheckCircle2, XCircle, RefreshCw, AlertTriangle,
   Search, Clock, User, ExternalLink, Loader2, Eye, RotateCcw,
@@ -15,6 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 interface Document {
   id: string;
   driverId: string;
+  driverPublicId?: string | null;
   driverName: string;
   /** Los valets suben documentos igual que los conductores; el rol los distingue. */
   role: 'driver' | 'valet';
@@ -234,6 +235,7 @@ interface DriverGroup {
   driverName: string;
   /** Para identificarlo aunque no tenga nombre: el mismo id que ve en su cuenta. */
   driverId: string;
+  driverPublicId: string | null;
   role: 'driver' | 'valet';
   docs: Document[];
   pending: number;
@@ -256,6 +258,7 @@ function groupByDriver(docs: Document[]): DriverGroup[] {
         key,
         driverName: d.driverName || 'Conductor sin nombre',
         driverId: d.driverId || '',
+        driverPublicId: d.driverPublicId ?? null,
         role: d.role,
         docs: [], pending: 0, approved: 0, rejected: 0,
       };
@@ -319,6 +322,7 @@ export default function Documents() {
       .then(data => setDocuments((data.documents ?? []).map((d: any) => ({
         id: d.id,
         driverId: d.driverId,
+        driverPublicId: d.driverPublicId ?? null,
         driverName: d.driverName,
         role: d.driverRole === 'valet' ? 'valet' : 'driver',
         docType: d.type,
@@ -758,7 +762,7 @@ export default function Documents() {
                       {g.driverId && (
                         // El Driver ID sirve para cruzarlo con Conductores y con
                         // lo que el propio conductor ve en su cuenta.
-                        <span className="font-mono ml-2" title="Driver ID">{formatUrbontId(g.driverId)}</span>
+                        <span className="font-mono ml-2" title="Driver ID">{idDePersona(g.driverPublicId, g.driverId)}</span>
                       )}
                     </p>
                   </div>

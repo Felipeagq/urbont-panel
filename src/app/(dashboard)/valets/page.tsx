@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { adminFetch } from '@/lib/api';
 import { Search, ConciergeBell, RefreshCw, AlertTriangle, ChevronRight, Star } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { idDePersona, coincideIdDePersona } from '@/lib/utils';
 import ValetDrawer, { VALET_STATUS, type Valet, type ValetStatus } from '@/components/ValetDrawer';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBulkSelection, SelectCheckbox, BulkDeleteBar } from '@/components/BulkSelection';
@@ -69,7 +70,9 @@ export default function Valets() {
 
   const filtered = valets.filter(v => {
     const q = search.toLowerCase();
-    const matchSearch = !q || v.name.toLowerCase().includes(q) || v.email.toLowerCase().includes(q)
+    // Una solicitud sin perfil (id `app:correo`) no tiene ID de persona que buscar.
+    const matchId = v.hasProfile && coincideIdDePersona(search, v);
+    const matchSearch = !q || matchId || v.name.toLowerCase().includes(q) || v.email.toLowerCase().includes(q)
       || v.phone.includes(q) || v.property.toLowerCase().includes(q) || v.city.toLowerCase().includes(q);
     return matchSearch && (filter === 'all' || v.status === filter);
   });
@@ -184,6 +187,11 @@ export default function Valets() {
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-gray-900 truncate">{v.name}</p>
                         <p className="text-xs text-gray-400 truncate">{v.email}</p>
+                        {v.hasProfile && (
+                          <p className="text-[11px] font-mono text-gray-400 truncate" title="ID del valet">
+                            {idDePersona(v.publicId, v.id)}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <div className="min-w-0">

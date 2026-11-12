@@ -102,6 +102,39 @@ export function formatUrbontId(uuid: string | null | undefined): string {
   return `URB-${clean.slice(0, 4)}-${clean.slice(4, 8)}`;
 }
 
+/**
+ * El ID que se enseña de un chofer o un valet.
+ *
+ * Es el `public_id` (`urb.paulo.estrada.1`) si ya lo tiene, y si no, el
+ * `URB-XXXX-XXXX` de siempre: sin nombre y apellido no hay ID público, y un
+ * hueco en pantalla sería peor que el formato viejo.
+ *
+ * Sólo para PERSONAS. Los IDs de viaje siguen siendo `formatUrbontId(ride.id)`.
+ */
+export function idDePersona(publicId: string | null | undefined, uuid: string | null | undefined): string {
+  const nuevo = typeof publicId === 'string' ? publicId.trim() : '';
+  return nuevo || formatUrbontId(uuid);
+}
+
+/**
+ * ¿Esta búsqueda es el ID de esta persona?
+ *
+ * Encuentra por **los dos**: el `public_id` nuevo, en cualquier trozo
+ * (`paulo.estrada`, `estrada.2`, `urb.paulo.estrada.1`), y el `URB-XXXX-XXXX`
+ * viejo o el UUID, por el principio. El viejo sigue valiendo a propósito: está
+ * en capturas, tickets de soporte y en las versiones de la app que todavía lo
+ * calculan en el teléfono.
+ */
+export function coincideIdDePersona(
+  busqueda: string,
+  persona: { id: string; publicId?: string | null },
+): boolean {
+  const q = normalizarIdBusqueda(busqueda);
+  if (q.length < 3) return false;
+  if (normalizarIdBusqueda(persona.id).startsWith(q)) return true;
+  return !!persona.publicId && normalizarIdBusqueda(persona.publicId).includes(q);
+}
+
 /** Para buscar: «URB-B50D-4430», «b50d4430» y el UUID entero valen igual. */
 export function normalizarIdBusqueda(valor: string): string {
   return valor.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().replace(/^URB/, '');

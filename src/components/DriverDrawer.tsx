@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { adminFetch } from '@/lib/api';
 import DeleteAccountButton from '@/components/DeleteAccountButton';
-import { formatDate, formatRelativeTime, actionTookEffect, formatUrbontId } from '@/lib/utils';
+import { formatDate, formatRelativeTime, actionTookEffect, idDePersona } from '@/lib/utils';
 import {
   X, Phone, Mail, Star, MapPin, Calendar, Car, Shield, ShieldCheck,
   UserX, UserCheck, Ban, MessageSquare, Loader2, ChevronRight,
@@ -26,6 +26,7 @@ interface DriverDocument {
 
 interface Driver {
   id: string;
+  publicId?: string | null;
   name: string;
   phone: string;
   email: string;
@@ -322,14 +323,14 @@ export default function DriverDrawer({ driver, onClose, onRefresh }: DriverDrawe
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Contacto</p>
                 <button
                   onClick={() => {
-                    navigator.clipboard?.writeText(formatUrbontId(driver.id));
+                    navigator.clipboard?.writeText(idDePersona(driver.publicId, driver.id));
                     toast.success('Driver ID copiado');
                   }}
                   className="flex items-center gap-3 text-sm text-gray-700 hover:text-(--brand) transition-colors w-full text-left"
                   title="Copiar el Driver ID"
                 >
                   <Hash className="w-4 h-4 text-gray-400 shrink-0" />
-                  <span className="font-mono">{formatUrbontId(driver.id)}</span>
+                  <span className="font-mono">{idDePersona(driver.publicId, driver.id)}</span>
                   <Copy className="w-3.5 h-3.5 text-gray-300" />
                 </button>
                 {[

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { adminFetch } from '@/lib/api';
 import SetPasswordButton from '@/components/SetPasswordButton';
-import { formatDate, actionTookEffect, formatUrbontId, normalizarIdBusqueda } from '@/lib/utils';
+import { formatDate, actionTookEffect, idDePersona, coincideIdDePersona } from '@/lib/utils';
 import {
   Search, Car, Star, Shield, CheckCircle2,
   Phone, ChevronDown, ChevronUp, RefreshCw, UserX, AlertTriangle, Hash, ExternalLink, Loader2, CreditCard, Clock
@@ -30,6 +30,8 @@ interface DriverDocument {
 
 interface Driver {
   id: string;
+  /** `urb.paulo.estrada.1`; null mientras no tenga nombre y apellido. */
+  publicId?: string | null;
   name: string;
   phone: string;
   email: string;
@@ -267,10 +269,10 @@ export default function Drivers() {
 
   const filtered = drivers.filter(d => {
     const q = search.toLowerCase();
-    // El Driver ID se busca sin guiones ni prefijo: el conductor lo dicta como
-    // «URB-B50D-4430» y en el panel se puede pegar así, suelto o con el UUID.
-    const qId = normalizarIdBusqueda(search);
-    const matchId = qId.length >= 3 && normalizarIdBusqueda(d.id).startsWith(qId);
+    // El Driver ID se busca por el nuevo (`urb.paulo.estrada.1`, entero o en
+    // trozos) y por el de siempre —«URB-B50D-4430», suelto o con el UUID—, que
+    // sigue valiendo: está en capturas y tickets viejos.
+    const matchId = coincideIdDePersona(search, d);
     const matchSearch = matchId || d.name.toLowerCase().includes(q) || d.email.toLowerCase().includes(q) || d.phone.includes(q) || d.plate?.toLowerCase().includes(q);
     const matchStatus = statusFilter === 'all' || d.status === statusFilter;
     return matchSearch && matchStatus;
@@ -413,7 +415,7 @@ export default function Drivers() {
                             className="text-[11px] font-mono text-gray-400 truncate"
                             title="Driver ID — el mismo que el conductor ve en su cuenta"
                           >
-                            {formatUrbontId(driver.id)}
+                            {idDePersona(driver.publicId, driver.id)}
                           </p>
                         </div>
                       </div>

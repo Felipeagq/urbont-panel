@@ -4,11 +4,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { adminFetch } from '@/lib/api';
 import SetPasswordButton from '@/components/SetPasswordButton';
 import DeleteAccountButton from '@/components/DeleteAccountButton';
-import { formatDate, formatRelativeTime } from '@/lib/utils';
+import { formatDate, formatRelativeTime, idDePersona } from '@/lib/utils';
 import {
   X, Phone, Mail, Star, MapPin, Calendar, UserX, UserCheck, Loader2, ChevronRight,
   DollarSign, Clock, Building2, FileText, AlertTriangle, ExternalLink, CheckCircle2,
-  XCircle, Languages, Briefcase, CreditCard, RefreshCw,
+  XCircle, Languages, Briefcase, CreditCard, RefreshCw, Hash, Copy,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -57,6 +57,8 @@ export function faltantesDocumentacion(d?: ValetDocumentation | null): string[] 
 
 export interface Valet {
   id: string;
+  /** `val.paulo.estrada.1`; null mientras no tenga perfil, o nombre y apellido. */
+  publicId?: string | null;
   name: string;
   email: string;
   phone: string;
@@ -390,6 +392,20 @@ export default function ValetDrawer({ valet, onClose, onRefresh }: ValetDrawerPr
             <div className="space-y-6">
               <div className="space-y-2.5">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Contacto</p>
+                {valet.hasProfile && (
+                  <button
+                    onClick={() => {
+                      navigator.clipboard?.writeText(idDePersona(valet.publicId, valet.id));
+                      toast.success('ID copiado');
+                    }}
+                    className="flex items-center gap-3 text-sm text-gray-700 hover:text-(--brand) transition-colors w-full text-left"
+                    title="Copiar el ID del valet"
+                  >
+                    <Hash className="w-4 h-4 text-gray-400 shrink-0" />
+                    <span className="font-mono">{idDePersona(valet.publicId, valet.id)}</span>
+                    <Copy className="w-3.5 h-3.5 text-gray-300" />
+                  </button>
+                )}
                 {[
                   { icon: Mail, label: valet.email },
                   { icon: Phone, label: valet.phone || '—' },

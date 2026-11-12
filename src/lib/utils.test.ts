@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { actionTookEffect, parseServerDate, formatDate, formatDay } from './utils';
+import {
+  actionTookEffect, parseServerDate, formatDate, formatDay,
+  coincideIdDePersona, formatUrbontId, idDePersona, normalizarIdBusqueda,
+} from './utils';
 
 interface Item {
   id: string;
@@ -85,5 +88,77 @@ describe('formatDate — siempre en hora de Miami', () => {
   it('formatDay da el dia en la zona de operacion', () => {
     // 01:30 UTC del dia 17 es todavia el 16 en Miami.
     expect(formatDay('2026-10-17T01:30:00Z')).toBe('Oct 16, 2026');
+  });
+});
+
+const UUID = 'b50d4430-aaaa-4bbb-8ccc-123456789012';
+
+describe('idDePersona: el ID que se enseña de un chofer o un valet', () => {
+  it('es el público si ya lo tiene', () => {
+    expect(idDePersona('urb.paulo.estrada.1', UUID)).toBe('urb.paulo.estrada.1');
+    expect(idDePersona('val.vera.ruiz.2', UUID)).toBe('val.vera.ruiz.2');
+  });
+
+  // Sin nombre y apellido no hay ID público, y un hueco en pantalla sería peor
+  // que el formato de siempre.
+  it('SIN ID PÚBLICO CAE AL URB-XXXX-XXXX DE SIEMPRE', () => {
+    expect(idDePersona(null, UUID)).toBe('URB-B50D-4430');
+    expect(idDePersona(undefined, UUID)).toBe('URB-B50D-4430');
+    expect(idDePersona('', UUID)).toBe('URB-B50D-4430');
+    expect(idDePersona('   ', UUID)).toBe('URB-B50D-4430');
+  });
+
+  it('el de siempre es exactamente formatUrbontId', () => {
+    expect(idDePersona(null, UUID)).toBe(formatUrbontId(UUID));
+  });
+});
+
+describe('coincideIdDePersona: encuentra por el nuevo y por el viejo', () => {
+  const ana = { id: UUID, publicId: 'urb.ana.ruiz.2' };
+  const vera = { id: '7a1c0000-aaaa-4bbb-8ccc-123456789012', publicId: 'val.vera.soto.1' };
+  const sinId = { id: UUID, publicId: null };
+
+  it('el ID público entero', () => {
+    expect(coincideIdDePersona('urb.ana.ruiz.2', ana)).toBe(true);
+    expect(coincideIdDePersona('URB.ANA.RUIZ.2', ana)).toBe(true);
+    expect(coincideIdDePersona('val.vera.soto.1', vera)).toBe(true);
+  });
+
+  it('en trozos: nombre y apellido, o apellido y número', () => {
+    expect(coincideIdDePersona('ana.ruiz', ana)).toBe(true);
+    expect(coincideIdDePersona('ruiz.2', ana)).toBe(true);
+    expect(coincideIdDePersona('vera.soto', vera)).toBe(true);
+  });
+
+  // Está en capturas, tickets de soporte y en las apps que todavía lo calculan
+  // en el teléfono: dejar de encontrarlo sería perder esos tickets.
+  it('EL URB-XXXX-XXXX VIEJO SIGUE ENCONTRANDO, SUELTO O CON EL UUID', () => {
+    expect(coincideIdDePersona('URB-B50D-4430', ana)).toBe(true);
+    expect(coincideIdDePersona('b50d4430', ana)).toBe(true);
+    expect(coincideIdDePersona(UUID, ana)).toBe(true);
+  });
+
+  it('y lo encuentra aunque no tenga ID público todavía', () => {
+    expect(coincideIdDePersona('URB-B50D-4430', sinId)).toBe(true);
+    expect(coincideIdDePersona('ana.ruiz', sinId)).toBe(false);
+  });
+
+  it('no confunde a una persona con otra', () => {
+    expect(coincideIdDePersona('ana.ruiz.1', ana)).toBe(false);   // ella es .2
+    expect(coincideIdDePersona('vera.soto', ana)).toBe(false);
+    expect(coincideIdDePersona('URB-7A1C-0000', ana)).toBe(false);
+  });
+
+  it('una búsqueda corta no marca a medio panel', () => {
+    expect(coincideIdDePersona('an', ana)).toBe(false);
+    expect(coincideIdDePersona('', ana)).toBe(false);
+    expect(coincideIdDePersona('urb', ana)).toBe(false);          // el prefijo solo se descarta
+  });
+});
+
+describe('normalizarIdBusqueda: lo que ya había, sin romper', () => {
+  it('el viejo vale igual escrito de varias formas', () => {
+    expect(normalizarIdBusqueda('URB-B50D-4430')).toBe('B50D4430');
+    expect(normalizarIdBusqueda('b50d4430')).toBe('B50D4430');
   });
 });
