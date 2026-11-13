@@ -75,7 +75,7 @@ interface DatosBancarios {
  * las fotos de limpieza y las inspecciones.
  */
 async function subirComprobante(payeeId: string, archivo: File): Promise<string> {
-  const permiso = await adminFetch(`/api/admin/payouts/${payeeId}/receipt-url`, {
+  const permiso = await adminFetch(`/payouts/${payeeId}/receipt-url`, {
     method: 'POST',
     body: JSON.stringify({ mimeType: archivo.type }),
   }) as { uploadUrl: string; path: string; maxBytes: number; headers: Record<string, string> };
@@ -115,8 +115,8 @@ export default function PagosManuales() {
     setError(null);
     try {
       const [s, r] = await Promise.all([
-        adminFetch('/api/admin/payouts/balances'),
-        adminFetch('/api/admin/payouts/recent?limite=20'),
+        adminFetch('/payouts/balances'),
+        adminFetch('/payouts/recent?limite=20'),
       ]);
       setSaldos(Array.isArray(s) ? s : []);
       setRecientes(Array.isArray(r) ? r : []);
@@ -196,7 +196,7 @@ export default function PagosManuales() {
                     documentPath = await subirComprobante(s.payeeId, comprobante);
                   }
 
-                  await adminFetch(`/api/admin/payouts/${s.payeeId}/pay`, {
+                  await adminFetch(`/payouts/${s.payeeId}/pay`, {
                     method: 'POST',
                     body: JSON.stringify({ method, reference, notes, documentPath }),
                   });
@@ -308,7 +308,7 @@ function FilaDePersona({
               onClick={async () => {
                 setViendo(true);
                 try {
-                  setDatos(await adminFetch(`/api/admin/payouts/${saldo.payeeId}/bank-details`));
+                  setDatos(await adminFetch(`/payouts/${saldo.payeeId}/bank-details`));
                 } finally {
                   setViendo(false);
                 }
