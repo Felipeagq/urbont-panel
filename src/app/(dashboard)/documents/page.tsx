@@ -5,6 +5,11 @@ import Link from 'next/link';
 import { adminFetch } from '@/lib/api';
 import { formatDate, formatRelativeTime, idDePersona } from '@/lib/utils';
 import {
+  ESTADOS_DE_DOCUMENTO as STATUS_CONFIG,
+  normalizarEstadoDeDocumento,
+  type EstadoDeDocumento,
+} from '@/lib/documentos';
+import {
   FileText, CheckCircle2, XCircle, RefreshCw, AlertTriangle,
   Search, Clock, User, ExternalLink, Loader2, Eye, RotateCcw,
   ChevronDown, ChevronUp, Users, LayoutGrid, Settings2, X
@@ -20,7 +25,7 @@ interface Document {
   /** Los valets suben documentos igual que los conductores; el rol los distingue. */
   role: 'driver' | 'valet';
   docType: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: EstadoDeDocumento;
   uploadedAt: string;
   /** `YYYY-MM-DD`; null en los documentos que no vencen. */
   expiresAt: string | null;
@@ -30,12 +35,6 @@ interface Document {
   notes?: string;
   rejectionReason?: string;
 }
-
-const STATUS_CONFIG = {
-  pending:  { label: 'Pendiente', class: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' },
-  approved: { label: 'Aprobado',  class: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
-  rejected: { label: 'Rechazado', class: 'bg-red-50 text-red-700 border-red-200', dot: 'bg-red-500' },
-};
 
 const ROLE_CONFIG = {
   driver: { label: 'Conductor', class: 'bg-blue-50 text-blue-700 border-blue-200' },
@@ -241,6 +240,7 @@ interface DriverGroup {
   pending: number;
   approved: number;
   rejected: number;
+  received: number;
 }
 
 /**
@@ -260,7 +260,7 @@ function groupByDriver(docs: Document[]): DriverGroup[] {
         driverId: d.driverId || '',
         driverPublicId: d.driverPublicId ?? null,
         role: d.role,
-        docs: [], pending: 0, approved: 0, rejected: 0,
+        docs: [], pending: 0, approved: 0, rejected: 0, received: 0,
       };
       map.set(key, g);
     }
@@ -326,7 +326,9 @@ export default function Documents() {
         driverName: d.driverName,
         role: d.driverRole === 'valet' ? 'valet' : 'driver',
         docType: d.type,
-        status: d.status === 'valid' ? 'approved' : d.status,
+        // Un estado que el panel no conoce (p. ej. `received`, el W-9 privado)
+        // no puede llegar hasta aquí sin configuración: tiraba toda la lista.
+        status: normalizarEstadoDeDocumento(d.status),
         uploadedAt: d.uploadDate,
         expiresAt: d.expiryDate ? String(d.expiryDate).slice(0, 10) : null,
         notices: d.notices ?? null,
@@ -395,6 +397,7 @@ export default function Documents() {
     pending: documents.filter(d => d.status === 'pending').length,
     approved: documents.filter(d => d.status === 'approved').length,
     rejected: documents.filter(d => d.status === 'rejected').length,
+    received: documents.filter(d => d.status === 'received').length,
   };
 
   const groups = grouped ? groupByDriver(filtered) : [];
@@ -623,7 +626,7 @@ export default function Documents() {
       <div className="flex gap-3 flex-wrap items-center">
         {/* Status pills */}
         <div className="flex gap-2">
-          {(['all', 'pending', 'approved', 'rejected'] as const).map(s => (
+          {(['all', 'pending', 'approved', 'rejected', ...(counts.received > 0 ? ['received' as const] : [])] as const).map(s => (
             <button
               key={s}
               onClick={() => setStatusFilter(s)}
@@ -775,6 +778,9 @@ export default function Documents() {
                     )}
                     {g.approved > 0 && (
                       <span className={`badge-sm ${STATUS_CONFIG.approved.class}`}>{g.approved} aprobado{g.approved === 1 ? '' : 's'}</span>
+                    )}
+                    {g.received > 0 && (
+                      <span className={`badge-sm ${STATUS_CONFIG.received.class}`}>{g.received} recibido{g.received === 1 ? '' : 's'}</span>
                     )}
                   </div>
                   {isCollapsed
