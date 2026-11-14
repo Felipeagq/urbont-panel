@@ -6,7 +6,7 @@ import { formatRelativeTime } from '@/lib/utils';
 import {
   Server, Database, RefreshCw, CheckCircle2, XCircle, AlertCircle, MinusCircle,
   Cpu, MemoryStick, Shield, Settings, Search, Save, Loader2, Zap, Mail,
-  CreditCard, Map, Flame, MessageSquare, Network, Languages, Eye, EyeOff,
+  CreditCard, Map, Flame, MessageSquare, Network, Languages, Eye, EyeOff, KeyRound,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -115,6 +115,9 @@ const STARTUP_INTEGRATIONS = [
   // Traducción del chat chofer↔pasajero (OpenAI). Se re-verifica también al
   // guardar una key nueva desde la tarjeta de abajo, no sólo al arrancar.
   { key: 'translation', label: 'Traducción', icon: Languages },
+  // Clave .p8 de Sign in with Apple. El login con Apple funciona sin ella; lo que
+  // falla es revocar los tokens de Apple al borrar cuentas (norma 5.1.1(v)).
+  { key: 'apple', label: 'Sign in with Apple', icon: KeyRound },
 ] as const;
 
 const ACTION_COLORS: Record<string, string> = {
@@ -413,8 +416,8 @@ export default function System() {
           <p className="text-[11px] text-gray-400">Verificadas al arrancar el servidor</p>
         </div>
         {/*
-          Tres columnas, como el grid de runtime de arriba: son seis
-          integraciones, así que quedan en 3 × 2. Con seis en una fila cada
+          Tres columnas, como el grid de runtime de arriba: son siete
+          integraciones, así que quedan en 3 + 3 + 1. Con todas en una fila cada
           tarjeta era tan estrecha que el estado se cortaba a media palabra
           ("Cobros habilita…", "verificado al ini…"), justo lo que hay que leer.
         */}
