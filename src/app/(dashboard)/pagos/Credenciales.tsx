@@ -6,7 +6,9 @@
  * Se escriben, **nunca se leen**. Lo que se ve de una clave guardada son sus
  * últimos cuatro caracteres, quién la puso y si el procesador la aceptó: lo
  * justo para reconocerla —y para notar que alguien subió la de pruebas a
- * producción— e inútil para usarla.
+ * producción— e inútil para usarla. Por campo se ve si está puesto y su vista
+ * enmascarada; solo los campos que no son secretos (localización, entorno,
+ * Application ID) salen enteros.
  *
  * Por eso guardar obliga a volver a escribir la clave entera: no hay forma de
  * «editar» algo que el panel no conoce.
@@ -16,7 +18,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { adminFetch } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatDate } from '@/lib/utils';
-import { AlertTriangle, Check, Copy, KeyRound, Lock, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, Check, Copy, KeyRound, Lock, Minus, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Campo {
@@ -66,7 +68,28 @@ interface Pasarela {
   montado: boolean;
   origen: 'entorno' | 'panel' | 'ninguno';
   campos: Campo[];
+  /** Lo guardado en cada campo. Ausente si el servicio de pagos aún no lo manda. */
+  valores?: Record<string, VistaDeCampo> | null;
   webhooks?: EnlaceWebhook[];
+}
+
+interface VistaDeCampo {
+  puesto: boolean;
+  /** Un secreto sale como ••••1234; un campo no secreto, entero. */
+  vista: string | null;
+}
+
+/** Tap to Pay de Square: los tres juntos o ninguno. */
+const TAP_TO_PAY_SQUARE = ['applicationId', 'applicationSecret', 'refreshToken'];
+
+/** Los campos de Tap to Pay que faltan cuando hay alguno puesto pero no todos. */
+function tapToPayIncompleto(p: Pasarela): string[] {
+  if (p.provider !== 'square' || !p.valores) return [];
+  const puestos = TAP_TO_PAY_SQUARE.filter(n => p.valores?.[n]?.puesto);
+  if (puestos.length === 0 || puestos.length === TAP_TO_PAY_SQUARE.length) return [];
+  return TAP_TO_PAY_SQUARE
+    .filter(n => !p.valores?.[n]?.puesto)
+    .map(n => p.campos.find(c => c.nombre === n)?.etiqueta ?? n);
 }
 
 interface Respuesta {
@@ -182,6 +205,50 @@ export default function Credenciales() {
               </div>
             </div>
 
+            {p.valores && (
+              <div className="border-t border-gray-100 bg-white px-4 py-3">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="text-[11px] font-medium text-gray-500">Variables guardadas en el panel</p>
+                  <p className="text-[11px] text-gray-400">
+                    {p.campos.filter(c => p.valores?.[c.nombre]?.puesto).length} de {p.campos.length} puestas
+                  </p>
+                </div>
+                <ul className="mt-2 divide-y divide-gray-50">
+                  {p.campos.map(c => {
+                    const v = p.valores?.[c.nombre];
+                    const puesto = !!v?.puesto;
+                    return (
+                      <li key={c.nombre} className="flex items-center justify-between gap-3 py-1.5">
+                        <span className="flex min-w-0 items-center gap-2 text-[12.5px] text-gray-700">
+                          {puesto
+                            ? <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600" aria-label="puesta" />
+                            : c.requerido
+                              ? <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-red-500" aria-label="falta, es obligatoria" />
+                              : <Minus className="h-3.5 w-3.5 shrink-0 text-gray-300" aria-label="vacía" />}
+                          <span className="truncate">{c.etiqueta}</span>
+                          <code className="hidden text-[10.5px] text-gray-300 sm:inline">{c.nombre}</code>
+                        </span>
+                        <span className={`shrink-0 font-mono text-[12px] ${puesto ? 'text-gray-800' : c.requerido ? 'text-red-500' : 'text-gray-300'}`}>
+                          {puesto ? v?.vista : c.requerido ? 'falta' : 'vacío'}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+                {tapToPayIncompleto(p).length > 0 && (
+                  <p className="mt-2 flex items-start gap-1.5 rounded-md bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-800">
+                    <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-amber-500" />
+                    Tap to Pay pide los tres juntos y faltan: {tapToPayIncompleto(p).join(', ')}.
+                  </p>
+                )}
+                {p.origen === 'entorno' && (
+                  <p className="mt-2 text-[11px] text-amber-700">
+                    Ojo: esta pasarela la manda una variable de entorno; lo de arriba es lo guardado en el panel, que no se usa mientras tanto.
+                  </p>
+                )}
+              </div>
+            )}
+
             {enlacesDe(p).map(w => (
               <div key={w.id} className="flex items-start justify-between gap-3 border-t border-gray-100 bg-gray-50/50 px-4 py-2.5">
                 <div className="min-w-0">
@@ -220,6 +287,11 @@ export default function Credenciales() {
                       placeholder={c.ayuda}
                     />
                     {c.ayuda && <p className="text-[11px] text-gray-400 mt-1">{c.ayuda}</p>}
+                    {p.valores && (
+                      <p className="text-[11px] text-gray-500 mt-0.5">
+                        Ahora: <span className="font-mono">{p.valores[c.nombre]?.puesto ? p.valores[c.nombre]?.vista : 'vacío'}</span>
+                      </p>
+                    )}
                   </div>
                 ))}
 
