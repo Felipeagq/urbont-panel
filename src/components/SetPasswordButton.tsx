@@ -9,7 +9,8 @@ import { useAuth } from '@/contexts/AuthContext';
 const MIN_LENGTH = 8;
 
 /**
- * Cambia la contraseña de un conductor o valet. Sólo para owner: el backend
+ * Cambia la contraseña de un conductor, un valet o una cuenta de prueba de
+ * pasajero. Sólo para owner: el backend
  * responde 403 al resto, así que a ellos no se les muestra el botón.
  */
 export default function SetPasswordButton({ userId, userName }: { userId: string; userName: string }) {

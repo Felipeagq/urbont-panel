@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import SetPasswordButton from '@/components/SetPasswordButton';
 
-type Rol = 'driver' | 'valet';
+type Rol = 'driver' | 'valet' | 'passenger';
 
 interface CuentaPrueba {
   id: string;
@@ -22,6 +22,7 @@ interface CuentaPrueba {
 const ROL_LABEL: Record<Rol, { label: string; class: string }> = {
   driver: { label: 'Chofer', class: 'bg-blue-50 text-blue-700 border-blue-200' },
   valet:  { label: 'Valet',  class: 'bg-violet-50 text-violet-700 border-violet-200' },
+  passenger: { label: 'Pasajero', class: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
 };
 
 const MIN_PASSWORD = 8;
@@ -131,7 +132,7 @@ export default function TestAccounts() {
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Rol</label>
             <div className="flex gap-2">
-              {(['driver', 'valet'] as const).map(r => (
+              {(['driver', 'valet', 'passenger'] as const).map(r => (
                 <button
                   key={r}
                   type="button"
@@ -192,8 +193,10 @@ export default function TestAccounts() {
         <p className="text-[11px] text-gray-500 mt-3">
           {form.role === 'driver'
             ? 'El chofer se crea aprobado, con un vehículo de prueba (sedán), operando en Miami.'
-            : 'El valet se crea con la cuenta activa, asignado a "Urbont Test Venue".'}
-          {' '}Es una cuenta real en producción: si se pone en línea dentro de la zona de servicio puede recibir viajes reales.
+            : form.role === 'valet'
+              ? 'El valet se crea con la cuenta activa, asignado a "Urbont Test Venue".'
+              : 'El pasajero se crea con la cuenta activa y sin tarjeta: para reservar, añade una tarjeta de prueba desde la app.'}
+          {form.role !== 'passenger' && ' Es una cuenta real en producción: si se pone en línea dentro de la zona de servicio puede recibir viajes reales.'}
         </p>
 
         <div className="flex justify-end mt-4">
