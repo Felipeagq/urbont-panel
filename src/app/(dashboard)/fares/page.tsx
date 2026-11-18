@@ -10,11 +10,12 @@ import { toast } from 'sonner';
 import SurgeCard from './SurgeCard';
 import HourlyFares from './HourlyFares';
 import ReservationCancelCard from './ReservationCancelCard';
+import DriverPenaltyCard from './DriverPenaltyCard';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   estimarPorDistancia,
   TIER1_MAX_MILES, TIER2_MAX_MILES,
-  type FareConfig, type PricingPolicy, type CancelTier,
+  type FareConfig, type PricingPolicy, type CancelTier, type DriverPenaltyPolicy, type DriverPenaltyLimits,
 } from '@/lib/fares';
 
 /**
@@ -120,6 +121,8 @@ export default function Fares() {
 
   // Penalidad del pasajero por cancelar una reserva (editable por owner).
   const [cancelRes, setCancelRes] = useState<{ tiers: CancelTier[]; defaults: CancelTier[]; limits: { minutosMin: number; minutosMax: number } } | null>(null);
+  // Penalización al chofer que suelta una reserva (editable por owner).
+  const [driverPenalty, setDriverPenalty] = useState<{ policy: DriverPenaltyPolicy; defaults: DriverPenaltyPolicy; limits: DriverPenaltyLimits } | null>(null);
 
   const loadData = useCallback(() => {
     setLoading(true);
@@ -143,6 +146,14 @@ export default function Fares() {
         const rc = res.reservationCancellation;
         setCancelRes(rc && Array.isArray(rc.tiers) && rc.tiers.length > 0
           ? { tiers: rc.tiers, defaults: rc.defaults ?? rc.tiers, limits: rc.limits ?? { minutosMin: 1, minutosMax: 10080 } }
+          : null);
+        const dp = res.driverPenalty;
+        setDriverPenalty(dp && dp.policy && Array.isArray(dp.policy.tiers) && dp.policy.tiers.length > 0
+          ? {
+              policy: dp.policy,
+              defaults: dp.defaults ?? dp.policy,
+              limits: dp.limits ?? { minutosMin: 1, minutosMax: 10080, graceMin: 0, graceMax: 60, appealMin: 1, appealMax: 168 },
+            }
           : null);
         const comision = typeof res.platformCommissionPercent === 'number' ? res.platformCommissionPercent : null;
         setCommission(comision);
@@ -558,6 +569,16 @@ export default function Fares() {
           defaults={cancelRes.defaults}
           limits={cancelRes.limits}
           onSaved={tiers => setCancelRes(prev => prev ? { ...prev, tiers } : prev)}
+        />
+      )}
+
+      {/* Penalización al chofer que suelta una reserva — editable por owner */}
+      {driverPenalty && (
+        <DriverPenaltyCard
+          policy={driverPenalty.policy}
+          defaults={driverPenalty.defaults}
+          limits={driverPenalty.limits}
+          onSaved={policy => setDriverPenalty(prev => prev ? { ...prev, policy } : prev)}
         />
       )}
 

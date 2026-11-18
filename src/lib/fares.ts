@@ -39,6 +39,24 @@ export interface FareConfig {
 /** Un tramo de la penalidad del pasajero por cancelar una reserva: con menos de `minutesBefore` min, `percent` % del total. */
 export interface CancelTier { minutesBefore: number; percent: number }
 
+/** Lo que paga el chofer que suelta una reserva ya aceptada (`GET /api/admin/fares` → `driverPenalty`). */
+export interface DriverPenaltyPolicy {
+  /** Minutos tras aceptar durante los que soltar la reserva no cuesta nada. */
+  graceMinutes: number;
+  /** Horas, desde la cancelación, que tiene el chofer para apelar. */
+  appealHours: number;
+  tiers: CancelTier[];
+}
+
+export interface DriverPenaltyLimits {
+  minutosMin: number;
+  minutosMax: number;
+  graceMin: number;
+  graceMax: number;
+  appealMin: number;
+  appealMax: number;
+}
+
 /** Políticas que publica el backend en `GET /api/admin/fares` (`pricingPolicy`). */
 export interface PricingPolicy {
   currency: string;

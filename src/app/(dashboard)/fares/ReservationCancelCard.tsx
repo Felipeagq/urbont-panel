@@ -6,38 +6,15 @@ import { toast } from 'sonner';
 import { adminFetch } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import type { CancelTier } from '@/lib/fares';
-
-/** 1440 → «24 h», 90 → «1 h 30 min», 30 → «30 min». */
-export function etiquetaDeMinutos(min: number): string {
-  if (!Number.isFinite(min) || min <= 0) return '—';
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  if (h === 0) return `${m} min`;
-  return m === 0 ? `${h} h` : `${h} h ${m} min`;
-}
-
-type Borrador = { minutesBefore: string; percent: string };
-const aBorrador = (t: CancelTier[]): Borrador[] => t.map(x => ({ minutesBefore: String(x.minutesBefore), percent: String(x.percent) }));
-
-/** Los porcentajes que el motor aplica: sólo owner edita, el resto lo ve. */
-function validar(b: Borrador[], limites: { minutosMin: number; minutosMax: number }): string | null {
-  const t = b.map(x => ({ m: Number(x.minutesBefore), p: Number(x.percent.replace(',', '.')) }));
-  if (t.some(x => !Number.isInteger(x.m) || x.m < limites.minutosMin || x.m > limites.minutosMax)) {
-    return `Los minutos deben ser enteros entre ${limites.minutosMin} y ${limites.minutosMax}.`;
-  }
-  if (t.some(x => !Number.isFinite(x.p) || x.p < 0 || x.p > 100)) return 'El porcentaje va de 0 a 100.';
-  for (let i = 1; i < t.length; i++) {
-    if (t[i].m >= t[i - 1].m) return 'Cada tramo debe tener menos minutos que el anterior.';
-    if (t[i].p < t[i - 1].p) return 'El porcentaje no puede bajar al acercarse la hora.';
-  }
-  return null;
-}
+import TierRows, {
+  aBorrador, aTramos, etiquetaDeMinutos, porcentajeParaMinutos, validarTramos, type Borrador,
+} from './TierRows';
 
 /**
  * Lo que paga el PASAJERO por cancelar una reserva. Los tramos se leen «por debajo»:
  * con menos de X minutos para la recogida se cobra ese porcentaje del total, hasta
  * que entra el siguiente. Con más antelación que el primero, es gratis.
- * (No es la penalidad del chofer, que se cambia en código.)
+ * (No es la penalización del chofer: esa tiene su propia tarjeta.)
  */
 export default function ReservationCancelCard({
   tiers, defaults, limits, onSaved,
@@ -55,7 +32,7 @@ export default function ReservationCancelCard({
   // Si el servidor manda otros tramos (recarga), el borrador los sigue.
   useEffect(() => { setBorrador(aBorrador(tiers)); }, [tiers]);
 
-  const error = useMemo(() => validar(borrador, limits), [borrador, limits]);
+  const error = useMemo(() => validarTramos(borrador, limits), [borrador, limits]);
   const cambiado = JSON.stringify(borrador) !== JSON.stringify(aBorrador(tiers));
   const esFabrica = JSON.stringify(borrador) === JSON.stringify(aBorrador(defaults));
 
@@ -68,9 +45,7 @@ export default function ReservationCancelCard({
     try {
       const r = await adminFetch('/fares/reservation-cancellation', {
         method: 'PUT',
-        body: JSON.stringify({
-          tiers: borrador.map(b => ({ minutesBefore: Number(b.minutesBefore), percent: Number(b.percent.replace(',', '.')) })),
-        }),
+        body: JSON.stringify({ tiers: aTramos(borrador) }),
       });
       onSaved(r.tiers);
       toast.success('Cancelación de reservas guardada');
@@ -83,12 +58,8 @@ export default function ReservationCancelCard({
 
   const primero = Number(borrador[0]?.minutesBefore);
   // Ejemplo en vivo: una reserva de $40 cancelada con 90 minutos de margen.
-  const ejemplo = (() => {
-    const t = borrador.map(b => ({ m: Number(b.minutesBefore), p: Number(b.percent.replace(',', '.')) })).sort((a, b) => a.m - b.m);
-    const hit = t.find(x => 90 < x.m);
-    const pct = hit ? hit.p : 0;
-    return { pct, usd: (40 * pct) / 100 };
-  })();
+  const ejemploPct = porcentajeParaMinutos(borrador, 90);
+  const ejemploUsd = (40 * ejemploPct) / 100;
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 space-y-3">
@@ -102,30 +73,7 @@ export default function ReservationCancelCard({
         las reservas por hora y a las ya creadas; los viajes de valet no pagan. Se aplica al instante.
       </p>
 
-      <div className="space-y-2 max-w-xl">
-        <div className="grid grid-cols-[1fr_1fr_5.5rem] gap-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-          <span>Con menos de (min)</span><span>Se cobra (%)</span><span />
-        </div>
-        {borrador.map((b, i) => (
-          <div key={i} className="grid grid-cols-[1fr_1fr_5.5rem] gap-3 items-center">
-            <input
-              type="number" min={limits.minutosMin} max={limits.minutosMax} step="1"
-              value={b.minutesBefore} disabled={!esOwner || guardando}
-              onChange={e => cambiar(i, 'minutesBefore', e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--brand)/30 disabled:bg-gray-50"
-              aria-label={`Minutos del tramo ${i + 1}`}
-            />
-            <input
-              type="number" min="0" max="100" step="1"
-              value={b.percent} disabled={!esOwner || guardando}
-              onChange={e => cambiar(i, 'percent', e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-(--brand)/30 disabled:bg-gray-50"
-              aria-label={`Porcentaje del tramo ${i + 1}`}
-            />
-            <span className="text-xs text-gray-400">{etiquetaDeMinutos(Number(b.minutesBefore))}</span>
-          </div>
-        ))}
-      </div>
+      <TierRows borrador={borrador} onChange={cambiar} disabled={!esOwner || guardando} limits={limits} />
 
       {error && cambiado && <p className="text-xs text-red-600">{error}</p>}
 
@@ -155,7 +103,7 @@ export default function ReservationCancelCard({
         )}
         {!error && (
           <p className="text-xs text-gray-400">
-            En una reserva de $40,00, cancelar con 1 h 30 min de antelación cuesta ${ejemplo.usd.toFixed(2)} ({ejemplo.pct} %).
+            En una reserva de $40,00, cancelar con 1 h 30 min de antelación cuesta ${ejemploUsd.toFixed(2)} ({ejemploPct} %).
           </p>
         )}
       </div>
