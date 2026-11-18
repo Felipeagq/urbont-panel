@@ -36,6 +36,9 @@ export interface FareConfig {
   hourlyEnabled?: boolean;
 }
 
+/** Un tramo de la penalidad del pasajero por cancelar una reserva: con menos de `minutesBefore` min, `percent` % del total. */
+export interface CancelTier { minutesBefore: number; percent: number }
+
 /** Políticas que publica el backend en `GET /api/admin/fares` (`pricingPolicy`). */
 export interface PricingPolicy {
   currency: string;
@@ -43,7 +46,7 @@ export interface PricingPolicy {
   mileTiers: { tier1MaxMiles: number; tier2MaxMiles: number };
   wait: { freeMinutes: number; maxBillableMinutes: number };
   noShow: { onDemandAfterMinutes: number; scheduledAfterMinutes: number };
-  scheduledCancellation: { freeHoursBefore: number; halfChargeHoursBefore: number };
+  scheduledCancellation: { tiers: CancelTier[] };
   onDemandCancellationFee: number;
   bookingFeeAppliesTo: string;
   valetExempt: boolean;

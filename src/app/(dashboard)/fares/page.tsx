@@ -9,11 +9,12 @@ import {
 import { toast } from 'sonner';
 import SurgeCard from './SurgeCard';
 import HourlyFares from './HourlyFares';
+import ReservationCancelCard from './ReservationCancelCard';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   estimarPorDistancia,
   TIER1_MAX_MILES, TIER2_MAX_MILES,
-  type FareConfig, type PricingPolicy,
+  type FareConfig, type PricingPolicy, type CancelTier,
 } from '@/lib/fares';
 
 /**
@@ -117,6 +118,9 @@ export default function Fares() {
   const [valetDraft, setValetDraft] = useState({ minimumUsd: '', thresholdUsd: '', percent: '' });
   const [savingValet, setSavingValet] = useState(false);
 
+  // Penalidad del pasajero por cancelar una reserva (editable por owner).
+  const [cancelRes, setCancelRes] = useState<{ tiers: CancelTier[]; defaults: CancelTier[]; limits: { minutosMin: number; minutosMax: number } } | null>(null);
+
   const loadData = useCallback(() => {
     setLoading(true);
     adminFetch('/settings/cash-payments')
@@ -136,6 +140,10 @@ export default function Fares() {
           setValetRules({ minimumUsd: v.minimumUsd, thresholdUsd: v.thresholdUsd, percent: v.percent });
           setValetDraft({ minimumUsd: String(v.minimumUsd), thresholdUsd: String(v.thresholdUsd), percent: String(v.percent) });
         }
+        const rc = res.reservationCancellation;
+        setCancelRes(rc && Array.isArray(rc.tiers) && rc.tiers.length > 0
+          ? { tiers: rc.tiers, defaults: rc.defaults ?? rc.tiers, limits: rc.limits ?? { minutosMin: 1, minutosMax: 10080 } }
+          : null);
         const comision = typeof res.platformCommissionPercent === 'number' ? res.platformCommissionPercent : null;
         setCommission(comision);
         setCommissionDraft(comision != null ? String(comision) : '');
@@ -543,6 +551,16 @@ export default function Fares() {
         )}
       </div>
 
+      {/* Cancelación de reservas por el pasajero — editable por owner */}
+      {cancelRes && (
+        <ReservationCancelCard
+          tiers={cancelRes.tiers}
+          defaults={cancelRes.defaults}
+          limits={cancelRes.limits}
+          onSaved={tiers => setCancelRes(prev => prev ? { ...prev, tiers } : prev)}
+        />
+      )}
+
       {/* Comisión de Urbont — editable */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-5 space-y-3">
         <div className="flex items-center gap-2">
@@ -748,10 +766,7 @@ export default function Fares() {
               {policy.onDemandCancellationFee > 0 ? `$${policy.onDemandCancellationFee.toFixed(2)}` : 'gratis'}.
             </li>
             <li>
-              <b className="text-gray-800">Cancelar una reserva:</b> gratis con {policy.scheduledCancellation.freeHoursBefore} h
-              o más de antelación · 50 % entre {policy.scheduledCancellation.freeHoursBefore} h
-              y {policy.scheduledCancellation.halfChargeHoursBefore} h · 100 % con menos
-              de {policy.scheduledCancellation.halfChargeHoursBefore} h.
+              <b className="text-gray-800">Cancelar una reserva:</b> se edita en la tarjeta «Cancelación de reservas».
             </li>
             <li>
               <b className="text-gray-800">Recogida lejana:</b> ${policy.longPickupFee.toFixed(2)} si el chofer
