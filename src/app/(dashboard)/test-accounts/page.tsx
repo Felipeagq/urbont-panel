@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { adminFetch } from '@/lib/api';
 import { formatRelativeTime } from '@/lib/utils';
-import { FlaskConical, Loader2, RefreshCw, Trash2, Copy, Wand2, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { FlaskConical, Loader2, RefreshCw, Trash2, Copy, Wand2, AlertTriangle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import SetPasswordButton from '@/components/SetPasswordButton';
@@ -17,6 +17,8 @@ interface CuentaPrueba {
   role: Rol;
   createdAt: string;
   createdBy: string;
+  /** null = no se guardó (cuenta anterior a esta función): se ve al cambiarla. */
+  password?: string | null;
 }
 
 const ROL_LABEL: Record<Rol, { label: string; class: string }> = {
@@ -58,6 +60,7 @@ export default function TestAccounts() {
   const [creando, setCreando] = useState(false);
   const [creada, setCreada] = useState<{ email: string; password: string; role: Rol } | null>(null);
   const [borrando, setBorrando] = useState<string | null>(null);
+  const [visibles, setVisibles] = useState<Set<string>>(new Set());
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -106,6 +109,12 @@ export default function TestAccounts() {
       setBorrando(null);
     }
   };
+
+  const alternarVisible = (id: string) => setVisibles(prev => {
+    const sig = new Set(prev);
+    if (sig.has(id)) sig.delete(id); else sig.add(id);
+    return sig;
+  });
 
   const copiar = (texto: string) => {
     navigator.clipboard.writeText(texto).then(() => toast.success('Copiado'), () => toast.error('No se pudo copiar'));
@@ -211,7 +220,7 @@ export default function TestAccounts() {
               <CheckCircle2 className="w-4 h-4" /> Cuenta de {ROL_LABEL[creada.role].label.toLowerCase()} lista
             </p>
             <p className="text-[11px] text-emerald-700 mb-3">
-              Guarda la contraseña ahora: no se vuelve a mostrar. Si la pierdes, cámbiala desde la lista.
+              La contraseña queda guardada y se ve en la lista de abajo. Si la cambias desde ahí, la lista muestra la nueva.
             </p>
             {([['Usuario', creada.email], ['Contraseña', creada.password]] as const).map(([etiqueta, valor]) => (
               <div key={etiqueta} className="flex items-center gap-2 text-sm mb-1.5">
@@ -256,10 +265,31 @@ export default function TestAccounts() {
                     <p className="text-sm font-semibold text-gray-900">{c.name}</p>
                     <p className="text-xs text-gray-400">{c.email}</p>
                   </div>
+                  <div className="flex items-center gap-1.5 w-56">
+                    {c.password ? (
+                      <>
+                        <code className="flex-1 truncate bg-gray-50 border border-gray-100 rounded px-2 py-1 text-xs font-mono text-gray-800">
+                          {visibles.has(c.id) ? c.password : '••••••••••••'}
+                        </code>
+                        <button
+                          onClick={() => alternarVisible(c.id)}
+                          className="text-gray-400 hover:text-gray-600"
+                          aria-label={visibles.has(c.id) ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                        >
+                          {visibles.has(c.id) ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                        <button onClick={() => copiar(c.password as string)} className="text-gray-400 hover:text-gray-600" aria-label="Copiar contraseña">
+                          <Copy className="w-4 h-4" />
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-[11px] text-gray-400">Sin guardar · cámbiala para verla</span>
+                    )}
+                  </div>
                   <span className={`badge-sm ${ROL_LABEL[c.role].class}`}>{ROL_LABEL[c.role].label}</span>
                   <span className="text-[11px] text-gray-400 w-40">Creada {formatRelativeTime(c.createdAt)} · {c.createdBy}</span>
                   <div className="flex gap-2">
-                    <SetPasswordButton userId={c.id} userName={c.name} />
+                    <SetPasswordButton userId={c.id} userName={c.name} onSaved={loadData} />
                     <button
                       onClick={() => eliminar(c)}
                       disabled={borrando === c.id}

@@ -13,7 +13,7 @@ const MIN_LENGTH = 8;
  * pasajero. Sólo para owner: el backend
  * responde 403 al resto, así que a ellos no se les muestra el botón.
  */
-export default function SetPasswordButton({ userId, userName }: { userId: string; userName: string }) {
+export default function SetPasswordButton({ userId, userName, onSaved }: { userId: string; userName: string; onSaved?: () => void }) {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [password, setPassword] = useState('');
@@ -58,6 +58,7 @@ export default function SetPasswordButton({ userId, userName }: { userId: string
       setOpen(false);
       setPassword('');
       setConfirm('');
+      onSaved?.();
     } catch (e) {
       toast.error((e as Error).message || 'No se pudo cambiar la contraseña');
       setSaving(false);
