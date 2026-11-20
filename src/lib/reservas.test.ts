@@ -5,6 +5,7 @@ import {
   cuandoEs,
   direccionesDeParadas,
   filtrarReservas,
+  textoAeropuerto,
   textoCabina,
   textoSillas,
   type Reserva,
@@ -144,5 +145,24 @@ describe('buscar y filtrar', () => {
 describe('contar por estado', () => {
   it('cuenta cada estado y el total', () => {
     expect(contarPorEstado(LISTA)).toEqual({ all: 3, scheduled: 1, confirmed: 1, cancelled: 1 });
+  });
+});
+
+describe('textoAeropuerto', () => {
+  it('arma la línea con lo que dio el pasajero', () => {
+    expect(textoAeropuerto({ role: 'pickup', direction: 'arrival', airline: { name: 'American Airlines' }, terminal: 'D', door: '6', gate: 'D12' }))
+      .toBe('Llegada · American Airlines · Terminal D · Puerta 6 · Gate D12');
+    expect(textoAeropuerto({ role: 'dropoff', direction: 'departure' })).toBe('Salida');
+  });
+
+  it('no repite el rótulo si el texto ya lo trae', () => {
+    expect(textoAeropuerto({ direction: 'arrival', terminal: 'Concourse D', door: 'Level 1 — Door D6' }))
+      .toBe('Llegada · Concourse D · Level 1 — Door D6');
+  });
+
+  it('sin datos o con datos que no valen, null', () => {
+    for (const raw of [null, undefined, 'x', 42, [], {}, { direction: 'sideways' }]) {
+      expect(textoAeropuerto(raw)).toBeNull();
+    }
   });
 });

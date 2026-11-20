@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
+import { textoAeropuerto } from '@/lib/reservas';
 
 interface MoneyBreakdown {
   cobradoAlPasajero: number;
@@ -62,6 +63,7 @@ interface Ride {
   notes?: string | null;
   stops?: unknown;
   child_seats?: unknown;
+  airport_details?: unknown;
   guest_name?: string | null;
   ride_preferences?: unknown;
   accessibility?: boolean | null;
@@ -161,6 +163,7 @@ const VEHICLE_LABELS: Record<string, string> = {
 
 function ReservaDelViaje({ ride }: { ride: Ride }) {
   const sillas = textoSillas(ride.child_seats);
+  const aeropuerto = textoAeropuerto(ride.airport_details);
   const cabina = textoCabina(ride.ride_preferences);
   const tipo = ride.booking_type ? (TIPO_RESERVA[ride.booking_type] ?? ride.booking_type) : null;
   const filas: Array<[string, string]> = [];
@@ -169,6 +172,7 @@ function ReservaDelViaje({ ride }: { ride: Ride }) {
   if (ride.dispatched_by_valet || ride.guest_name) filas.push(['Huésped', ride.guest_name || 'Sin nombre']);
   if (ride.valet_booking_ref) filas.push(['Reserva valet', ride.valet_booking_ref]);
   if (sillas) filas.push(['Sillas', sillas]);
+  if (aeropuerto) filas.push(['Aeropuerto', aeropuerto]);
   if (cabina) filas.push(['Cabina', cabina]);
   if (ride.accessibility) filas.push(['Accesibilidad', 'La pidió']);
   if (ride.notes) filas.push(['Nota', ride.notes]);

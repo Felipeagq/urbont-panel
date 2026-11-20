@@ -35,6 +35,8 @@ export interface Reserva {
   passengers: number | null;
   luggage: number | null;
   childSeats: unknown;
+  /** Llegada o salida, aerolínea, terminal y puerta que dio el pasajero. */
+  airportDetails?: unknown;
   notes: string | null;
   guestName: string | null;
   ridePreferences: unknown;
@@ -187,6 +189,24 @@ export function direccionesDeParadas(stops: unknown): string[] {
       return '';
     })
     .filter(Boolean);
+}
+
+/** «Llegada · American Airlines · Terminal D · Puerta 6», o `null` si no hay datos. */
+export function textoAeropuerto(raw: unknown): string | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  if (o.direction !== 'arrival' && o.direction !== 'departure') return null;
+  const texto = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+  const con = (valor: string | null, yaLoTrae: RegExp, rotulo: string) =>
+    valor ? (yaLoTrae.test(valor) ? valor : `${rotulo} ${valor}`) : null;
+  const aerolinea = o.airline && typeof o.airline === 'object' ? texto((o.airline as { name?: unknown }).name) : null;
+  return [
+    o.direction === 'arrival' ? 'Llegada' : 'Salida',
+    aerolinea,
+    con(texto(o.terminal), /terminal|concourse|north|central|south/i, 'Terminal'),
+    con(texto(o.door), /door|puerta/i, 'Puerta'),
+    con(texto(o.gate), /gate|puerta/i, 'Gate'),
+  ].filter(Boolean).join(' · ');
 }
 
 export function textoSillas(raw: unknown): string | null {

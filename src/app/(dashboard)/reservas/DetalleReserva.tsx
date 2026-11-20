@@ -20,6 +20,7 @@ import {
   cuandoEs,
   direccionesDeParadas,
   estadoConfig,
+  textoAeropuerto,
   textoCabina,
   textoSillas,
   type Reserva,
@@ -84,6 +85,7 @@ export default function DetalleReserva({ reserva: r, onClose }: { reserva: Reser
   const pago = r.paymentStatus ? PAGO_CONFIG[r.paymentStatus] : null;
   const paradas = direccionesDeParadas(r.stops);
   const sillas = textoSillas(r.childSeats);
+  const aeropuerto = textoAeropuerto(r.airportDetails);
   const cabina = textoCabina(r.ridePreferences);
 
   const copiar = (texto: string) => {
@@ -205,6 +207,7 @@ export default function DetalleReserva({ reserva: r, onClose }: { reserva: Reser
             {r.passengers !== null && <Fila etiqueta="Pasajeros" valor={r.passengers} />}
             {r.luggage !== null && <Fila etiqueta="Equipaje" valor={r.luggage} />}
             {sillas && <Fila etiqueta="Sillas infantiles" valor={sillas} />}
+            {aeropuerto && <Fila etiqueta="Aeropuerto" valor={aeropuerto} />}
             {r.accessibility && <Fila etiqueta="Accesibilidad" valor="Requiere vehículo accesible" />}
             {cabina && <Fila etiqueta="Cabina" valor={cabina} />}
             {r.notes && <Fila etiqueta="Notas" valor={r.notes} />}
