@@ -7,6 +7,7 @@ import { BellOff, BellRing, Phone } from 'lucide-react';
 import { adminFetch } from '@/lib/api';
 import { beep } from '@/lib/alarmSound';
 import { parseServerDate } from '@/lib/utils';
+import { titular } from '@/lib/reservation-alarm';
 
 /**
  * Aviso de reservas que el chofer no confirmó, en todas las páginas del panel.
@@ -24,6 +25,12 @@ import { parseServerDate } from '@/lib/utils';
  */
 interface Alarma {
   id: string;
+  /**
+   * `unconfirmed`: el chofer no confirmó la reserva. `not_started`: no pulsó
+   * «On my way» a pocos minutos de la hora. Una API anterior no lo manda: se lee
+   * como `unconfirmed`.
+   */
+  kind?: 'unconfirmed' | 'not_started';
   rideId: string | null;
   driverName: string | null;
   driverPhone: string | null;
@@ -98,14 +105,14 @@ export default function ReservationAlarm() {
         <BellRing className="h-4 w-4 shrink-0 text-red-600" />
 
         <p className="min-w-0 flex-1 text-sm text-red-800">
-          <strong>
-            {alarmas.length === 1 ? 'Una reserva sin confirmar' : `${alarmas.length} reservas sin confirmar`}
-          </strong>
+          <strong>{titular(alarmas)}</strong>
           {alarmas.length === 1 && (
             <>
               {' — '}
-              {primera.driverName ?? 'el chofer'} lleva{' '}
-              <strong>{desdeHace(primera.shouldHaveConfirmedAt, ahora) || 'varios minutos'}</strong> sin responder.
+              {primera.driverName ?? 'el chofer'}{' '}
+              {primera.kind === 'not_started'
+                ? <>aún no pulsó «On my way» y lleva <strong>{desdeHace(primera.shouldHaveConfirmedAt, ahora) || 'unos minutos'}</strong> de aviso.</>
+                : <>lleva <strong>{desdeHace(primera.shouldHaveConfirmedAt, ahora) || 'varios minutos'}</strong> sin responder.</>}
             </>
           )}
           {alarmas.length > 1 && ' — llámalos para confirmar que van en camino.'}
