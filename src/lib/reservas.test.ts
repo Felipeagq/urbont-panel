@@ -160,6 +160,18 @@ describe('textoAeropuerto', () => {
       .toBe('Llegada · Concourse D · Level 1 — Door D6');
   });
 
+  it('añade cuántas personas y maletas, en singular y en plural', () => {
+    expect(textoAeropuerto({ direction: 'arrival', terminal: 'D', passengers: 5, luggage: 3 }))
+      .toBe('Llegada · Terminal D · 5 pasajeros · 3 maletas');
+    expect(textoAeropuerto({ direction: 'departure', passengers: 1, luggage: 1 })).toBe('Salida · 1 pasajero · 1 maleta');
+    expect(textoAeropuerto({ direction: 'arrival', passengers: 2, luggage: 0 })).toBe('Llegada · 2 pasajeros · 0 maletas');
+  });
+
+  it('un grupo que no vale se omite sin tirar el resto', () => {
+    expect(textoAeropuerto({ direction: 'arrival', terminal: 'D', passengers: 0, luggage: -1 })).toBe('Llegada · Terminal D');
+    expect(textoAeropuerto({ direction: 'arrival', passengers: '3', luggage: 2.5 })).toBe('Llegada');
+  });
+
   it('sin datos o con datos que no valen, null', () => {
     for (const raw of [null, undefined, 'x', 42, [], {}, { direction: 'sideways' }]) {
       expect(textoAeropuerto(raw)).toBeNull();

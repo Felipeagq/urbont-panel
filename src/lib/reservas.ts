@@ -191,7 +191,7 @@ export function direccionesDeParadas(stops: unknown): string[] {
     .filter(Boolean);
 }
 
-/** «Llegada · American Airlines · Terminal D · Puerta 6», o `null` si no hay datos. */
+/** «Llegada · American Airlines · Terminal D · Puerta 6 · 3 pasajeros · 2 maletas», o `null` si no hay datos. */
 export function textoAeropuerto(raw: unknown): string | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const o = raw as Record<string, unknown>;
@@ -206,7 +206,15 @@ export function textoAeropuerto(raw: unknown): string | null {
     con(texto(o.terminal), /terminal|concourse|north|central|south/i, 'Terminal'),
     con(texto(o.door), /door|puerta/i, 'Puerta'),
     con(texto(o.gate), /gate|puerta/i, 'Gate'),
+    cantidad(o.passengers, 1, 10, 'pasajero', 'pasajeros'),
+    cantidad(o.luggage, 0, 10, 'maleta', 'maletas'),
   ].filter(Boolean).join(' · ');
+}
+
+/** «3 pasajeros» si es un entero en rango; `null` si no (cero maletas sí cuenta: «0 maletas»). */
+function cantidad(v: unknown, min: number, max: number, uno: string, varios: string): string | null {
+  if (typeof v !== 'number' || !Number.isInteger(v) || v < min || v > max) return null;
+  return `${v} ${v === 1 ? uno : varios}`;
 }
 
 export function textoSillas(raw: unknown): string | null {
