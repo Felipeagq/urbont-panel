@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Car, Users, FileText, DollarSign,
   MapPin, TrendingUp, AlertTriangle, MessageSquareWarning,
   Headphones, Star, Settings, Shield, FlaskConical, LogOut, Menu, X, ChevronRight, CreditCard,
-  Globe2, Bell, ConciergeBell, Camera, Scale, Wallet, CalendarClock
+  Globe2, Bell, ConciergeBell, Camera, Scale, Wallet, CalendarClock, Sparkles
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import type { AdminRole } from '@/lib/api';
@@ -38,6 +38,7 @@ const NAV_ITEMS: NavItem[] = [
   { name: 'penalties',   label: 'Penalidades',      href: '/penalties',  icon: Scale,                roles: ['owner','support','operations'],                       group: 'ops' },
   { name: 'fares',       label: 'Tarifas',          href: '/fares',      icon: DollarSign,           roles: ['owner','developer','operations'],                     group: 'ops' },
   { name: 'zones',       label: 'Zonas',            href: '/zones',      icon: Globe2,               roles: ['owner','developer','operations'],                     group: 'ops' },
+  { name: 'car-themes',  label: 'Carros del mapa',  href: '/car-themes', icon: Sparkles,             roles: ['owner','operations'],                                 group: 'ops' },
   { name: 'revenue',     label: 'Ingresos',         href: '/revenue',    icon: TrendingUp,           roles: ['owner','operations','analyst','finance'],             group: 'ops' },
   { name: 'pagos',       label: 'Pagos',            href: '/pagos',      icon: Wallet,               roles: ['owner','finance'],                                    group: 'ops' },
   { name: 'incidents',   label: 'Incidentes',       href: '/incidents',  icon: AlertTriangle,        roles: ['owner','support','operations'],                       group: 'ops' },

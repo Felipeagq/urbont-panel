@@ -83,7 +83,13 @@ export async function adminFetch(endpoint: string, options: RequestInit = {}, ba
       // Leer únicamente `message` convertía todos los fallos en un «API Error»
       // genérico y tiraba a la basura mensajes que existen para ser leídos, como
       // el 409 de «no puedes desactivar la última zona activa».
-      throw new Error(data.error || data.message || 'API Error');
+      // Se conserva el cuerpo entero (`data`) y el código HTTP (`status`): algunas rutas
+      // devuelven algo más que un mensaje, como la lista de problemas de un paquete de
+      // carros rechazado. Quien sólo lee `.message` no nota la diferencia.
+      const error = new Error(data.error || data.message || 'API Error') as Error & { status?: number; data?: unknown };
+      error.status = response.status;
+      error.data = data;
+      throw error;
     }
     return data;
   }
