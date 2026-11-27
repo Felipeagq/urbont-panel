@@ -22,6 +22,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { adminFetch } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import CuentasDeCobro, { type CuentaDeCobro } from './CuentasDeCobro';
 import {
   AlertTriangle, Banknote, Car, CheckCircle2, ConciergeBell,
   Eye, Loader2, RefreshCw, ShieldAlert, ShieldCheck,
@@ -106,6 +107,7 @@ const METODOS = [
 export default function PagosManuales() {
   const [saldos, setSaldos] = useState<Saldo[]>([]);
   const [recientes, setRecientes] = useState<Pago[]>([]);
+  const [cuentas, setCuentas] = useState<CuentaDeCobro[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pagando, setPagando] = useState<string | null>(null);
@@ -114,12 +116,17 @@ export default function PagosManuales() {
     setCargando(true);
     setError(null);
     try {
-      const [s, r] = await Promise.all([
+      const [s, r, c] = await Promise.all([
         adminFetch('/payouts/balances'),
         adminFetch('/payouts/recent?limite=20'),
+        // Las cuentas se piden aparte de los saldos: quien acaba de registrar la
+        // suya y aún no tiene dinero no sale en `balances`, y es justo a quien
+        // hay que validar. Si esta lectura falla, el resto de la pantalla sigue.
+        adminFetch('/payouts/accounts').catch(() => []),
       ]);
       setSaldos(Array.isArray(s) ? s : []);
       setRecientes(Array.isArray(r) ? r : []);
+      setCuentas(Array.isArray(c) ? c : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudieron cargar los pagos.');
     } finally {
@@ -169,6 +176,8 @@ export default function PagosManuales() {
           <RefreshCw className="w-3.5 h-3.5" /> Actualizar
         </button>
       </div>
+
+      <CuentasDeCobro cuentas={cuentas} onCambio={cargar} />
 
       {saldos.length === 0 ? (
         <div className="rounded-xl border border-gray-100 bg-white p-8 text-center text-[13px] text-gray-500">
