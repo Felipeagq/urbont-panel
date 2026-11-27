@@ -7,8 +7,11 @@ import { formatDate, formatRelativeTime, idDePersona } from '@/lib/utils';
 import {
   ESTADOS_DE_DOCUMENTO as STATUS_CONFIG,
   normalizarEstadoDeDocumento,
+  tipoDeEntrada,
   type EstadoDeDocumento,
+  type TipoDeEntrada,
 } from '@/lib/documentos';
+import { TextoDelDocumento } from './TextoDelDocumento';
 import {
   FileText, CheckCircle2, XCircle, RefreshCw, AlertTriangle,
   Search, Clock, User, ExternalLink, Loader2, Eye, RotateCcw,
@@ -32,6 +35,10 @@ interface Document {
   /** Avisos de vencimiento ya enviados al conductor; null si el backend no los manda. */
   notices: { d30: boolean; d15: boolean; d7: boolean } | null;
   fileUrl: string;
+  /** `text`: el conductor lo entregó como número cifrado y no hay imagen. Ausente: archivo. */
+  inputType?: TipoDeEntrada;
+  /** `••••6789` de un documento de texto; el número entero se pide con «Mostrar». */
+  textHint?: string | null;
   notes?: string;
   rejectionReason?: string;
 }
@@ -333,6 +340,8 @@ export default function Documents() {
         expiresAt: d.expiryDate ? String(d.expiryDate).slice(0, 10) : null,
         notices: d.notices ?? null,
         fileUrl: d.imageUrl,
+        inputType: tipoDeEntrada(d.inputType),
+        textHint: typeof d.textHint === 'string' ? d.textHint : null,
         notes: d.notes,
         rejectionReason: d.rejectionReason,
       }))))
@@ -532,6 +541,8 @@ export default function Documents() {
             </div>
           ) : doc.fileUrl ? (
             <img src={doc.fileUrl} alt={doc.docType} className="w-full h-full object-cover" />
+          ) : doc.inputType === 'text' ? (
+            <TextoDelDocumento id={doc.id} pista={doc.textHint ?? null} />
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
               <FileText className="w-10 h-10 text-gray-300" />

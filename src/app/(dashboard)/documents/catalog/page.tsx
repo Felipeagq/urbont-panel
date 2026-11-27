@@ -36,11 +36,16 @@ interface Documento {
   sortOrder: number;
   /** 1 = se le pide al registrarse. 2 = solo cuando se le apruebe la fase 1. */
   phase: 1 | 2;
+  /**
+   * Cómo lo entrega: `file` sube un archivo (lo de siempre) y `text` escribe un número
+   * que se guarda cifrado (el Social Security). Ausente: archivo. Solo conductores.
+   */
+  inputType?: 'file' | 'text';
 }
 
-type Borrador = Pick<Documento, 'key' | 'label' | 'category' | 'hint' | 'expires' | 'phase'>;
+type Borrador = Pick<Documento, 'key' | 'label' | 'category' | 'hint' | 'expires' | 'phase' | 'inputType'>;
 
-const vacio = (a: Audiencia): Borrador => ({ key: '', label: '', category: AUDIENCIAS[a].categoria, hint: '', expires: false, phase: 1 });
+const vacio = (a: Audiencia): Borrador => ({ key: '', label: '', category: AUDIENCIAS[a].categoria, hint: '', expires: false, phase: 1, inputType: 'file' });
 
 /** El conductor sube la fase 1; la 2 se le abre cuando se le aprueba la primera. */
 const FASES = [
@@ -242,6 +247,24 @@ export default function CatalogoDocumentos() {
                 </select>
               </label>
             )}
+            {audiencia === 'driver' && (
+              <label className="text-xs text-gray-500 space-y-1">
+                <span>Cómo lo entrega</span>
+                <select
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-(--brand)/30"
+                  value={borrador.inputType ?? 'file'}
+                  onChange={e => setBorrador({ ...borrador, inputType: e.target.value as 'file' | 'text' })}
+                >
+                  <option value="file">Archivo · foto o PDF</option>
+                  <option value="text">Texto · un número, guardado cifrado</option>
+                </select>
+                {borrador.inputType === 'text' && (
+                  <span className="block text-[11px] text-amber-700">
+                    Necesita la variable DOC_TEXT_KEY en el servidor; sin ella el número no se guarda.
+                  </span>
+                )}
+              </label>
+            )}
           </div>
           <div className="flex items-center justify-between">
             <label className="flex items-center gap-2 text-xs text-gray-600">
@@ -381,6 +404,25 @@ export default function CatalogoDocumentos() {
                               >
                                 <option value={1}>Fase 1</option>
                                 <option value={2}>Fase 2</option>
+                              </select>
+                            )}
+                            {audiencia === 'driver' && (
+                              <select
+                                value={doc.inputType ?? 'file'}
+                                disabled={guardando === doc.key}
+                                onChange={e => {
+                                  const tipo = e.target.value as 'file' | 'text';
+                                  guardar(
+                                    doc.key,
+                                    { inputType: tipo },
+                                    tipo === 'text' ? `«${doc.label}» ahora se escribe como número` : `«${doc.label}» ahora se sube como archivo`,
+                                  );
+                                }}
+                                aria-label={`Cómo se entrega ${doc.label}`}
+                                className="text-[11px] border border-gray-200 rounded-md px-1.5 py-0.5 bg-white text-gray-600 disabled:opacity-50"
+                              >
+                                <option value="file">Archivo</option>
+                                <option value="text">Texto</option>
                               </select>
                             )}
                           </div>

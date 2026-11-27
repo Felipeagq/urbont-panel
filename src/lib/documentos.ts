@@ -34,3 +34,20 @@ export function normalizarEstadoDeDocumento(raw: unknown): EstadoDeDocumento {
   }
   return 'pending';
 }
+
+/** Cómo entrega el documento quien lo sube: un archivo, o un número escrito (cifrado en el servidor). */
+export type TipoDeEntrada = 'file' | 'text';
+
+/** Lo que mande la API: sólo «text» es texto; todo lo demás es archivo. */
+export function tipoDeEntrada(raw: unknown): TipoDeEntrada {
+  return raw === 'text' ? 'text' : 'file';
+}
+
+/**
+ * El número de un documento de texto, legible: «123456789» → «123-45-6789», que es como
+ * se lee un Social Security. Con otra longitud se deja tal cual, sin inventar separadores.
+ */
+export function formatearNumeroDeDocumento(digitos: string): string {
+  const limpio = digitos.replace(/\s/g, '');
+  return /^\d{9}$/.test(limpio) ? `${limpio.slice(0, 3)}-${limpio.slice(3, 5)}-${limpio.slice(5)}` : limpio;
+}

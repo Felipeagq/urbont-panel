@@ -10,9 +10,33 @@
 import { describe, expect, it } from 'vitest';
 import {
   ESTADOS_DE_DOCUMENTO,
+  formatearNumeroDeDocumento,
   normalizarEstadoDeDocumento,
+  tipoDeEntrada,
   type EstadoDeDocumento,
 } from './documentos';
+
+describe('tipoDeEntrada', () => {
+  it('sólo «text» es texto; lo demás, archivo', () => {
+    expect(tipoDeEntrada('text')).toBe('text');
+    expect(tipoDeEntrada('file')).toBe('file');
+    expect(tipoDeEntrada(undefined)).toBe('file');
+    expect(tipoDeEntrada(null)).toBe('file');
+    expect(tipoDeEntrada('TEXT')).toBe('file');
+  });
+});
+
+describe('formatearNumeroDeDocumento', () => {
+  it('un número de 9 dígitos se lee como un Social Security', () => {
+    expect(formatearNumeroDeDocumento('123456789')).toBe('123-45-6789');
+  });
+
+  it('con otra longitud se deja tal cual', () => {
+    expect(formatearNumeroDeDocumento('12345678')).toBe('12345678');
+    expect(formatearNumeroDeDocumento('123456789012345')).toBe('123456789012345');
+    expect(formatearNumeroDeDocumento('')).toBe('');
+  });
+});
 
 describe('normalizarEstadoDeDocumento', () => {
   it('los estados conocidos pasan tal cual', () => {
